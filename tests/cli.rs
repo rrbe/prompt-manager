@@ -39,11 +39,46 @@ fn renders_piped_input_and_explicit_variables_with_clean_stdout() {
     );
 
     pm(directory.path())
-        .args(["render", "review", "-v", "language=rust"])
+        .args(["get", "review", "-v", "language=rust"])
         .write_stdin("hello\n")
         .assert()
         .success()
         .stdout("Language: rust\n\nhello\n")
+        .stderr("");
+}
+
+#[test]
+fn gets_plain_prompt_without_consuming_piped_input() {
+    let directory = TempDir::new().unwrap();
+    import_prompt(
+        directory.path(),
+        "plain.md",
+        "---\nname: plain\n---\n\nplain body",
+    );
+
+    pm(directory.path())
+        .args(["get", "plain"])
+        .write_stdin("ignored")
+        .assert()
+        .success()
+        .stdout("plain body")
+        .stderr("");
+}
+
+#[test]
+fn gets_prompt_by_id() {
+    let directory = TempDir::new().unwrap();
+    import_prompt(
+        directory.path(),
+        "by-id.md",
+        "---\nname: by-id\n---\n\nselected by id",
+    );
+
+    pm(directory.path())
+        .args(["get", "--id", "1"])
+        .assert()
+        .success()
+        .stdout("selected by id")
         .stderr("");
 }
 
@@ -57,7 +92,7 @@ fn explicit_input_overrides_piped_input() {
     );
 
     pm(directory.path())
-        .args(["render", "input-test", "-v", "input=explicit"])
+        .args(["get", "input-test", "-v", "input=explicit"])
         .write_stdin("piped")
         .assert()
         .success()
@@ -75,7 +110,7 @@ fn missing_variables_fail_without_stdout() {
     );
 
     pm(directory.path())
-        .args(["render", "missing"])
+        .args(["get", "missing"])
         .assert()
         .failure()
         .code(1)
@@ -93,7 +128,7 @@ fn non_tty_input_fulfills_input_even_when_empty() {
     );
 
     pm(directory.path())
-        .args(["render", "empty-input"])
+        .args(["get", "empty-input"])
         .write_stdin("")
         .assert()
         .success()
@@ -114,7 +149,7 @@ fn file_variables_render_and_duplicate_sources_fail() {
     let assignment = format!("source={}", source.display());
 
     pm(directory.path())
-        .args(["render", "file-test", "--file", &assignment])
+        .args(["get", "file-test", "--file", &assignment])
         .assert()
         .success()
         .stdout("from file")
@@ -122,7 +157,7 @@ fn file_variables_render_and_duplicate_sources_fail() {
 
     pm(directory.path())
         .args([
-            "render",
+            "get",
             "file-test",
             "-v",
             "source=inline",
@@ -150,8 +185,9 @@ fn export_remove_import_round_trip_preserves_content_and_tags() {
         .unwrap();
     assert!(exported.status.success());
     assert!(exported.stderr.is_empty());
+    let exported_markdown = String::from_utf8(exported.stdout).unwrap();
     let exported_path = directory.path().join("exported.md");
-    fs::write(&exported_path, exported.stdout).unwrap();
+    fs::write(&exported_path, &exported_markdown).unwrap();
 
     pm(directory.path())
         .args(["rm", "round-trip", "--force"])
@@ -166,10 +202,10 @@ fn export_remove_import_round_trip_preserves_content_and_tags() {
         .stdout("")
         .stderr("");
     pm(directory.path())
-        .args(["get", "round-trip"])
+        .args(["export", "round-trip"])
         .assert()
         .success()
-        .stdout("Body\n\n{{input}}")
+        .stdout(exported_markdown)
         .stderr("");
 }
 
@@ -191,48 +227,26 @@ fn list_and_search_have_stable_line_formats() {
         .arg("list")
         .assert()
         .success()
-        .stdout("alpha\nbeta\n")
+        .stdout("2\talpha\n1\tbeta\n")
         .stderr("");
     pm(directory.path())
         .args(["list", "--tag", "coding"])
         .assert()
         .success()
-        .stdout("alpha\n")
+        .stdout("2\talpha\n")
         .stderr("");
     pm(directory.path())
         .args(["search", "Mongo"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("alpha\tFirst\n"))
-        .stdout(predicate::str::contains("beta\tMongo check\n"))
+        .stdout(predicate::str::contains("2\talpha\tFirst\n"))
+        .stdout(predicate::str::contains("1\tbeta\tMongo check\n"))
         .stderr("");
     pm(directory.path())
         .args(["search", "Mongo", "--name-only"])
         .assert()
         .success()
         .stdout(predicate::str::is_match("^(alpha|beta)\\n(alpha|beta)\\n$").unwrap())
-        .stderr("");
-}
-
-#[test]
-fn recent_lists_only_used_prompts() {
-    let directory = TempDir::new().unwrap();
-    import_prompt(
-        directory.path(),
-        "unused.md",
-        "---\nname: unused\n---\n\nbody",
-    );
-    import_prompt(directory.path(), "used.md", "---\nname: used\n---\n\nbody");
-
-    pm(directory.path())
-        .args(["get", "used"])
-        .assert()
-        .success();
-    pm(directory.path())
-        .arg("recent")
-        .assert()
-        .success()
-        .stdout("used\n")
         .stderr("");
 }
 
@@ -264,13 +278,13 @@ fn list_supports_long_output_sorting_and_favorite_filters() {
         .args(["list", "--tag", "coding", "--favorite"])
         .assert()
         .success()
-        .stdout("beta-list\n")
+        .stdout("2\tbeta-list\n")
         .stderr("");
     pm(directory.path())
         .args(["list", "--sort", "used"])
         .assert()
         .success()
-        .stdout("beta-list\nalpha-list\n")
+        .stdout("2\tbeta-list\n1\talpha-list\n")
         .stderr("");
     pm(directory.path())
         .args(["list", "--long", "--sort", "used"])
@@ -278,7 +292,7 @@ fn list_supports_long_output_sorting_and_favorite_filters() {
         .success()
         .stdout(
             predicate::str::is_match(
-                "^beta-list\\t[0-9]{4}-[0-9]{2}-[0-9]{2}T.*Z\\t[0-9]{4}-[0-9]{2}-[0-9]{2}T.*Z\\nalpha-list\\t[0-9]{4}-[0-9]{2}-[0-9]{2}T.*Z\\t-\\n$",
+                "^2\\tbeta-list\\t[0-9]{4}-[0-9]{2}-[0-9]{2}T.*Z\\t[0-9]{4}-[0-9]{2}-[0-9]{2}T.*Z\\n1\\talpha-list\\t[0-9]{4}-[0-9]{2}-[0-9]{2}T.*Z\\t-\\n$",
             )
             .unwrap(),
         )
@@ -367,7 +381,7 @@ fn history_and_diff_include_atomic_edit_versions() {
         )
         .stderr("");
     pm(directory.path())
-        .args(["diff", "versioned@1", "versioned@2"])
+        .args(["history", "versioned", "diff", "1", "2"])
         .assert()
         .success()
         .stdout(predicate::str::contains("--- versioned@1"))
@@ -378,7 +392,7 @@ fn history_and_diff_include_atomic_edit_versions() {
 }
 
 #[test]
-fn render_expands_nested_prompt_composition_and_rejects_cycles() {
+fn get_expands_nested_prompt_composition_and_rejects_cycles() {
     let directory = TempDir::new().unwrap();
     import_prompt(
         directory.path(),
@@ -396,7 +410,7 @@ fn render_expands_nested_prompt_composition_and_rejects_cycles() {
         "---\nname: composed\n---\n\nStart\n{{prompt:middle}}\n{{input}}",
     );
     pm(directory.path())
-        .args(["render", "composed", "-v", "language=rust"])
+        .args(["get", "composed", "-v", "language=rust"])
         .write_stdin("code")
         .assert()
         .success()
@@ -414,7 +428,7 @@ fn render_expands_nested_prompt_composition_and_rejects_cycles() {
         "---\nname: cycle-b\n---\n\n{{prompt:cycle-a}}",
     );
     pm(directory.path())
-        .args(["render", "cycle-a"])
+        .args(["get", "cycle-a"])
         .assert()
         .failure()
         .code(1)
@@ -451,39 +465,6 @@ fn dynamic_completion_reads_prompt_names_from_the_database() {
 }
 
 #[test]
-fn check_validates_files_and_stdin_without_opening_the_database() {
-    let directory = TempDir::new().unwrap();
-    let valid = "---\nname: checked\n---\n\n{{input}}";
-    let path = write_prompt(directory.path(), "checked.md", valid);
-
-    pm(directory.path())
-        .args(["check", path.to_str().unwrap()])
-        .assert()
-        .success()
-        .stdout("")
-        .stderr("");
-    pm(directory.path())
-        .args(["check", "-"])
-        .write_stdin(valid)
-        .assert()
-        .success()
-        .stdout("")
-        .stderr("");
-    pm(directory.path())
-        .args(["check", "-"])
-        .write_stdin("body without front matter")
-        .assert()
-        .failure()
-        .code(1)
-        .stdout("")
-        .stderr(predicate::str::contains(
-            "missing opening front matter delimiter",
-        ));
-
-    assert!(!directory.path().join("pm/pm.db").exists());
-}
-
-#[test]
 fn completions_do_not_open_the_database() {
     let directory = TempDir::new().unwrap();
     pm(directory.path())
@@ -503,19 +484,19 @@ fn completions_do_not_open_the_database() {
 
 #[cfg(unix)]
 #[test]
-fn pick_outputs_the_name_selected_by_external_fzf() {
+fn get_pick_renders_the_prompt_selected_by_external_fzf() {
     use std::os::unix::fs::PermissionsExt;
 
     let directory = TempDir::new().unwrap();
     import_prompt(
         directory.path(),
         "alpha-pick.md",
-        "---\nname: alpha-pick\n---\n\nbody",
+        "---\nname: alpha-pick\n---\n\nalpha body",
     );
     import_prompt(
         directory.path(),
         "beta-pick.md",
-        "---\nname: beta-pick\n---\n\nbody",
+        "---\nname: beta-pick\n---\n\n{{language}} beta body",
     );
     let binary_directory = directory.path().join("bin");
     fs::create_dir(&binary_directory).unwrap();
@@ -530,15 +511,15 @@ fn pick_outputs_the_name_selected_by_external_fzf() {
 
     pm(directory.path())
         .env("PATH", path)
-        .arg("pick")
+        .args(["get", "--pick", "-v", "language=rust"])
         .assert()
         .success()
-        .stdout("beta-pick\n")
+        .stdout("rust beta body")
         .stderr("");
 }
 
 #[test]
-fn pick_reports_a_missing_fzf() {
+fn get_pick_reports_a_missing_fzf() {
     let directory = TempDir::new().unwrap();
     import_prompt(
         directory.path(),
@@ -548,7 +529,7 @@ fn pick_reports_a_missing_fzf() {
 
     pm(directory.path())
         .env("PATH", "")
-        .arg("pick")
+        .args(["get", "--pick"])
         .assert()
         .failure()
         .code(1)
@@ -653,10 +634,18 @@ fn add_and_edit_use_an_external_editor_and_protect_original_on_failure() {
 fn invalid_cli_arguments_use_exit_code_two() {
     let directory = TempDir::new().unwrap();
     pm(directory.path())
-        .args(["render", "test", "-v", "invalid"])
+        .args(["get", "test", "-v", "invalid"])
         .assert()
         .failure()
         .code(2)
         .stdout("")
         .stderr(predicate::str::contains("expected KEY=VALUE"));
+
+    pm(directory.path())
+        .args(["get", "test", "--pick"])
+        .assert()
+        .failure()
+        .code(2)
+        .stdout("")
+        .stderr(predicate::str::contains("cannot be used with"));
 }

@@ -29,7 +29,8 @@ pub fn run(arguments: ListArgs, database: &Database) -> Result<()> {
         .map(|prompt| {
             if arguments.long {
                 Ok(format!(
-                    "{}\t{}\t{}",
+                    "{}\t{}\t{}\t{}",
+                    prompt.id,
                     prompt.name,
                     format_timestamp(prompt.updated_at)?,
                     prompt
@@ -39,7 +40,7 @@ pub fn run(arguments: ListArgs, database: &Database) -> Result<()> {
                         .unwrap_or_else(|| "-".into())
                 ))
             } else {
-                Ok(prompt.name)
+                Ok(format!("{}\t{}", prompt.id, prompt.name))
             }
         })
         .collect::<Result<Vec<_>>>()?;
@@ -75,11 +76,13 @@ mod tests {
     fn sorts_unused_prompts_after_used_prompts() {
         let mut prompts = vec![
             PromptListEntry {
+                id: 1,
                 name: "unused".into(),
                 updated_at: 1,
                 last_used_at: None,
             },
             PromptListEntry {
+                id: 2,
                 name: "used".into(),
                 updated_at: 1,
                 last_used_at: Some(2),

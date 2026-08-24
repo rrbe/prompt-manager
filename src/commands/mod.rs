@@ -1,7 +1,5 @@
 mod add;
-mod check;
 mod completions;
-mod diff;
 mod edit;
 mod export;
 mod favorite;
@@ -9,24 +7,17 @@ mod get;
 mod history;
 mod import;
 mod list;
-mod pick;
-mod recent;
 mod remove;
-mod render;
 mod search;
 
 use std::io::{self, Write};
 
 use crate::{
-    cli::{CheckArgs, Command, CompletionsArgs},
+    cli::{Command, CompletionsArgs},
     db::{Database, Prompt, PromptInput},
     error::Result,
     prompt::markdown::PromptDocument,
 };
-
-pub fn check(arguments: CheckArgs) -> Result<()> {
-    check::run(arguments)
-}
 
 pub fn completions(arguments: CompletionsArgs) -> Result<()> {
     completions::run(arguments)
@@ -38,17 +29,13 @@ pub fn execute(command: Command, database: &mut Database) -> Result<()> {
         Command::Edit(arguments) => edit::run(arguments, database),
         Command::Rm(arguments) => remove::run(arguments, database),
         Command::Get(arguments) => get::run(arguments, database),
-        Command::Render(arguments) => render::run(arguments, database),
         Command::List(arguments) => list::run(arguments, database),
         Command::Search(arguments) => search::run(arguments, database),
-        Command::Recent => recent::run(database),
-        Command::Pick => pick::run(database),
         Command::Import(arguments) => import::run(arguments, database),
         Command::Export(arguments) => export::run(arguments, database),
         Command::Favorite(arguments) => favorite::run(arguments, database),
         Command::History(arguments) => history::run(arguments, database),
-        Command::Diff(arguments) => diff::run(arguments, database),
-        Command::Check(_) | Command::Completions(_) => {
+        Command::Completions(_) => {
             unreachable!("standalone command reached database dispatcher")
         }
     }

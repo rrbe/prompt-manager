@@ -6,6 +6,7 @@ use super::Database;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SearchResult {
+    pub id: i64,
     pub name: String,
     pub description: String,
 }
@@ -14,7 +15,7 @@ impl Database {
     pub fn search_prompts(&self, query: &str) -> Result<Vec<SearchResult>> {
         let query = literal_fts_query(query)?;
         let mut statement = self.connection.prepare(
-            "SELECT prompts.name, COALESCE(prompts.description, '')\n\
+            "SELECT prompts.id, prompts.name, COALESCE(prompts.description, '')\n\
              FROM prompts_fts\n\
              JOIN prompts ON prompts.id = prompts_fts.rowid\n\
              WHERE prompts_fts MATCH ?1\n\
@@ -22,8 +23,9 @@ impl Database {
         )?;
         let rows = statement.query_map(params![query], |row| {
             Ok(SearchResult {
-                name: row.get(0)?,
-                description: row.get(1)?,
+                id: row.get(0)?,
+                name: row.get(1)?,
+                description: row.get(2)?,
             })
         })?;
         rows.collect::<std::result::Result<Vec<_>, _>>()

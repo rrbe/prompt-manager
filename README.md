@@ -1,30 +1,28 @@
 # PM
 
-`pm` 是一个小型、本地、适合 Unix Pipeline 的 Terminal Prompt Manager。它使用 SQLite 保存、搜索和渲染可复用 Prompt，但不调用或绑定任何 LLM。
+`pm` 是一个命令行 Prompt Manager。使用 SQLite 保存可复用的 Prompt，支持搜索和 Pipe 给其他命令行程序。
 
-```text
-anything -> pm -> anything
-             |
-           SQLite
-```
-
-最核心的使用方式：
+示例调用方式
 
 ```bash
-git diff | pm render code-review | llm
+pm add foobar # 创建名为 foobar 的 Prompt，并在外部编辑器中编写内容
+pm list # 列出已保存的 Prompts
+pm get foobar # 获取 Prompt 正文并输出到 stdout
+pm get foobar | codex exec - # 将保存的 Prompt 交给 Codex
+pm get foobar | claude -p # 将保存的 Prompt 交给 Claude
 ```
 
 ## 安装
 
 需要 Rust stable toolchain。SQLite 已静态编译进 binary，不需要安装系统 SQLite library。
 
-从源码构建并安装到 `/usr/local/bin/pm`：
+### 从源码构建并安装到 `/usr/local/bin/pm`：
 
 ```bash
 make install
 ```
 
-也可以安装到用户拥有的目录：
+### 安装到用户拥有的目录：
 
 ```bash
 make install INSTALL_DIR="$HOME/.local/bin"
@@ -38,11 +36,13 @@ sudo /usr/bin/install -v -m 0755 target/release/pm /usr/local/bin/pm
 /usr/local/bin/pm --version
 ```
 
-或者使用 Cargo 安装到 `~/.cargo/bin`：
+### 使用 Cargo 安装到 `~/.cargo/bin`：
 
 ```bash
 cargo install --path .
 ```
+
+## 数据存储
 
 默认数据库路径为：
 
@@ -87,29 +87,39 @@ Review the following code:
 
 `rm` 默认在 TTY 中要求确认；非交互调用必须传 `--force`。
 
-## 获取和渲染
+## 获取 Prompt
 
-`get` 只输出原始 Prompt body，不读取 stdin 或替换变量：
+`get` 获取并渲染 Prompt。Prompt 不包含变量或组合引用时，正文会原样输出：
 
 ```bash
-pm get code-review | pbcopy
+pm get foobar
+pm get --id 1
 ```
 
-`render` 支持普通变量、文件变量和保留的 `input` 变量：
+`get` 支持普通变量、文件变量和保留的 `input` 变量：
 
 ```bash
-git diff | pm render code-review \
+pm get foobar \
   -v language=rust \
   -v focus=correctness
 
-pm render compare \
+pm get compare \
   --file old=old.rs \
   --file new=new.rs
 ```
 
+安装外部 `fzf` 后，可以不提供名称并交互选择 Prompt：
+
+```bash
+pm get --pick
+pm get --pick | codex exec -
+```
+
+`<NAME>`、`--id` 和 `--pick` 必须三选一。没有安装 `fzf` 或取消选择时返回错误。`fzf` 作为外部程序使用，不会打包进 `pm`。
+
 变量名称必须匹配 `[a-zA-Z_][a-zA-Z0-9_-]*`。`--var` 与 `--file` 不能为同一个 key 同时提供值；显式提供的 `input` 优先于 stdin。缺少变量时命令失败，不会保留模板或替换为空。
 
-只有模板包含 `{{input}}` 且没有显式提供 `input` 时，`render` 才读取 stdin。stdin 是交互式 TTY 时会立即失败，不会等待 EOF。
+只有模板包含 `{{input}}` 且没有显式提供 `input` 时，`get` 才读取 stdin。stdin 是交互式 TTY 时会立即失败，不会等待 EOF。
 
 ## 与 AI CLI 组合
 
@@ -118,26 +128,20 @@ pm render compare \
 使用 Codex 非交互执行：
 
 ```bash
-git diff |
-  pm render code-review \
-    -v language=rust \
-    -v focus=correctness |
-  codex exec -
+pm get prompt-name | codex exec -
 ```
 
 使用 Claude Code 的 Print 模式：
 
 ```bash
-cat error.log |
-  pm render debug-log |
-  claude -p
+pm get prompt-name | claude -p
 ```
 
 也可以组合其他命令或重定向结果：
 
 ```bash
-pm render release-notes --file changes=CHANGELOG.md | another-ai-cli
-git diff | pm render code-review | codex exec - > review.txt
+pm get prompt-name | another-ai-cli
+some-command | pm get prompt-name | codex exec - > result.txt
 ```
 
 其中 `codex exec -` 的 `-` 表示从 stdin 读取指令，`claude -p` 会输出响应后退出。`pm` 不读取这些工具的配置，也不绑定 Provider 或模型。
@@ -152,23 +156,30 @@ pm list --long --sort updated
 pm list --long --sort used
 pm search mongo
 pm search mongo --name-only
-pm recent
 ```
 
-`list` 按名称排序，每行输出一个名称。`search` 使用 SQLite FTS5 搜索 name、description 和 body，默认格式为 TSV：
+`list` 按名称排序，默认格式为无表头 TSV：
 
 ```text
-name<TAB>description
+id<TAB>name
+```
+
+可以将其中的 ID 传给 `pm get --id ID`。Prompt 创建后，ID 不会因编辑或改名而变化，删除后也不会被新 Prompt 复用。
+
+`search` 使用 SQLite FTS5 搜索 name、description 和 body，默认格式为 TSV：
+
+```text
+id<TAB>name<TAB>description
 ```
 
 `--name-only` 每行只输出名称。包含多个词的查询使用字面量 AND 语义，不接受原始 FTS 表达式。
 
-`list --tag` 使用 Tag 精确过滤。`--favorite` 只保留收藏项，两者可以组合。`--sort` 支持 `name`、`updated` 和 `used`；名称升序，时间倒序，未使用项排在最后。`recent` 只列出执行过 `get` 或成功 `render` 的 Prompt，并按最近使用时间倒序输出名称。
+`list --tag` 使用 Tag 精确过滤。`--favorite` 只保留收藏项，两者可以组合。`--sort` 支持 `name`、`updated` 和 `used`；名称升序，时间倒序，未使用项排在最后。使用 `pm list --sort used` 可以按最近使用时间查看 Prompt。
 
-默认 `list` 仍然每行只输出 Prompt name。`-l/--long` 改为无表头 TSV，时间使用 UTC RFC3339：
+`-l/--long` 增加时间列，时间使用 UTC RFC3339：
 
 ```text
-name<TAB>updated_at<TAB>last_used_at
+id<TAB>name<TAB>updated_at<TAB>last_used_at
 ```
 
 从收藏中添加或移除 Prompt：
@@ -177,15 +188,6 @@ name<TAB>updated_at<TAB>last_used_at
 pm favorite code-review
 pm favorite code-review --remove
 ```
-
-安装外部 `fzf` 后可以交互选择 Prompt：
-
-```bash
-pm pick
-pm get "$(pm pick)"
-```
-
-`pick` 的 stdout 只包含选中的 Prompt name；没有安装 `fzf` 或取消选择时返回错误。`fzf` 作为外部程序使用，不会打包进 `pm`。
 
 ## Import 和 Export
 
@@ -197,15 +199,6 @@ pm export --all ./prompts/
 
 `export --all` 按名称生成一个 Markdown 文件，并原子覆盖目录中的同名导出文件。Import 名称冲突时失败，不会覆盖已有 Prompt。Markdown 仅用于导入、导出、备份和分享；SQLite 始终是唯一数据源。
 
-可以在不连接数据库的情况下手动校验 Markdown：
-
-```bash
-pm check code-review.md
-pm export code-review | pm check -
-```
-
-校验成功时 stdout 和 stderr 均为空并返回 `0`；格式错误写入 stderr 并返回 `1`。Vim/Neovim 中可以使用 `:!pm check %` 在退出编辑器前检查当前文件。
-
 ## Shell Completion
 
 生成 bash、zsh 或 fish 的静态 completion：
@@ -216,7 +209,7 @@ pm completions zsh > _pm
 pm completions fish > pm.fish
 ```
 
-加入 `--dynamic` 后，生成的脚本会在补全时只读访问 SQLite，为 `get`、`edit`、`rm`、`render`、`favorite`、`history` 和 `diff` 补全 Prompt name 或版本：
+加入 `--dynamic` 后，生成的脚本会在补全时只读访问 SQLite，为 `get`、`edit`、`rm`、`favorite` 和 `history` 补全 Prompt name：
 
 ```bash
 pm completions bash --dynamic > pm.bash
@@ -228,11 +221,11 @@ pm completions fish --dynamic > pm.fish
 
 ## History
 
-创建和每次有实际内容或 metadata 变化的编辑都会生成一个版本快照。无变化的编辑、`get`、`render` 和收藏操作不会生成版本。
+创建和每次有实际内容或 metadata 变化的编辑都会生成一个版本快照。无变化的编辑、`get` 和收藏操作不会生成版本。
 
 ```bash
 pm history code-review
-pm diff code-review@1 code-review@3
+pm history code-review diff 1 3
 ```
 
 `history` 输出无表头 TSV：
@@ -241,7 +234,7 @@ pm diff code-review@1 code-review@3
 version<TAB>created_at<TAB>historical_name
 ```
 
-`diff` 输出包含 front matter 和 body 的 unified diff。Prompt 删除时，其历史版本也会随数据库记录一并删除。
+`history <NAME> diff <OLD> <NEW>` 输出包含 front matter 和 body 的 unified diff。Prompt 删除时，其历史版本也会随数据库记录一并删除。
 
 ## Prompt Composition
 
@@ -255,7 +248,7 @@ Prompt body 可以引用其他 Prompt：
 {{input}}
 ```
 
-只在 `render` 时递归展开，随后统一替换普通变量和 `input`。`get` 和 Export 仍输出原始引用。引用不存在或形成直接/间接循环时渲染失败，stdout 保持为空。
+`get` 会递归展开组合引用，随后统一替换普通变量和 `input`。Export 仍输出原始引用。引用不存在或形成直接/间接循环时，`get` 失败且 stdout 保持为空。
 
 ## Pipeline 协议
 

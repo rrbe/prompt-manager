@@ -28,6 +28,7 @@ pub struct PromptInput {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PromptListEntry {
+    pub id: i64,
     pub name: String,
     pub updated_at: i64,
     pub last_used_at: Option<i64>,
@@ -41,12 +42,14 @@ impl Database {
         }
 
         let now = now_timestamp();
-        transaction.execute(
-            "INSERT INTO prompts(name, description, content, created_at, updated_at)\n\
-             VALUES (?1, ?2, ?3, ?4, ?4)",
-            params![input.name, input.description, input.content, now],
-        )?;
+        transaction.execute("INSERT INTO prompt_id_sequence DEFAULT VALUES", [])?;
         let id = transaction.last_insert_rowid();
+        transaction.execute("DELETE FROM prompt_id_sequence WHERE id = ?1", [id])?;
+        transaction.execute(
+            "INSERT INTO prompts(id, name, description, content, created_at, updated_at)\n\
+             VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
+            params![id, input.name, input.description, input.content, now],
+        )?;
         tags::replace(&transaction, id, &input.tags)?;
         history::record_version(&transaction, id, input, now)?;
         transaction.commit()?;
@@ -57,20 +60,6 @@ impl Database {
         let transaction = self.connection.transaction()?;
         let prompt = query_prompt(&transaction, name)?
             .ok_or_else(|| Error::PromptNotFound(name.to_owned()))?;
-        transaction.commit()?;
-        Ok(prompt)
-    }
-
-    pub fn get_prompt_and_mark_used(&mut self, name: &str) -> Result<Prompt> {
-        let transaction = self.connection.transaction()?;
-        let prompt = query_prompt(&transaction, name)?
-            .ok_or_else(|| Error::PromptNotFound(name.to_owned()))?;
-        transaction.execute(
-            "UPDATE prompts\n\
-             SET last_used_at = ?1, use_count = use_count + 1\n\
-             WHERE id = ?2",
-            params![now_timestamp(), prompt.id],
-        )?;
         transaction.commit()?;
         Ok(prompt)
     }
@@ -140,30 +129,13 @@ impl Database {
             .map_err(Into::into)
     }
 
-    pub fn list_prompt_names_with_tag(&self, tag: &str) -> Result<Vec<String>> {
-        let mut statement = self.connection.prepare(
-            "SELECT prompts.name\n\
-             FROM prompts\n\
-             JOIN prompt_tags ON prompt_tags.prompt_id = prompts.id\n\
-             JOIN tags ON tags.id = prompt_tags.tag_id\n\
-             WHERE tags.name = ?1\n\
-             ORDER BY prompts.name",
-        )?;
-        let rows = statement.query_map([tag], |row| row.get(0))?;
-        rows.collect::<std::result::Result<Vec<_>, _>>()
-            .map_err(Into::into)
-    }
-
-    pub fn recent_prompt_names(&self) -> Result<Vec<String>> {
-        let mut statement = self.connection.prepare(
-            "SELECT name\n\
-             FROM prompts\n\
-             WHERE last_used_at IS NOT NULL\n\
-             ORDER BY last_used_at DESC, name",
-        )?;
-        let rows = statement.query_map([], |row| row.get(0))?;
-        rows.collect::<std::result::Result<Vec<_>, _>>()
-            .map_err(Into::into)
+    pub fn prompt_name_by_id(&self, id: i64) -> Result<String> {
+        self.connection
+            .query_row("SELECT name FROM prompts WHERE id = ?1", [id], |row| {
+                row.get(0)
+            })
+            .optional()?
+            .ok_or_else(|| Error::PromptNotFound(id.to_string()))
     }
 
     pub fn set_prompt_favorite(&self, name: &str, favorite: bool) -> Result<()> {
@@ -183,7 +155,7 @@ impl Database {
         favorite_only: bool,
     ) -> Result<Vec<PromptListEntry>> {
         let mut statement = self.connection.prepare(
-            "SELECT prompts.name, prompts.updated_at, prompts.last_used_at\n\
+            "SELECT prompts.id, prompts.name, prompts.updated_at, prompts.last_used_at\n\
              FROM prompts\n\
              WHERE (?1 IS NULL OR EXISTS (\n\
                  SELECT 1\n\
@@ -196,9 +168,10 @@ impl Database {
         )?;
         let rows = statement.query_map(params![tag, favorite_only], |row| {
             Ok(PromptListEntry {
-                name: row.get(0)?,
-                updated_at: row.get(1)?,
-                last_used_at: row.get(2)?,
+                id: row.get(0)?,
+                name: row.get(1)?,
+                updated_at: row.get(2)?,
+                last_used_at: row.get(3)?,
             })
         })?;
         rows.collect::<std::result::Result<Vec<_>, _>>()
@@ -317,7 +290,7 @@ mod tests {
     fn tracks_usage() {
         let mut database = Database::in_memory().unwrap();
         database.create_prompt(&input("used", "body", &[])).unwrap();
-        database.get_prompt_and_mark_used("used").unwrap();
+        database.mark_prompt_used("used").unwrap();
         database.mark_prompt_used("used").unwrap();
         let prompt = database.get_prompt("used").unwrap();
         assert_eq!(prompt.use_count, 2);
@@ -325,7 +298,19 @@ mod tests {
     }
 
     #[test]
-    fn filters_by_tag_and_lists_only_used_prompts_as_recent() {
+    fn does_not_reuse_deleted_prompt_ids() {
+        let mut database = Database::in_memory().unwrap();
+        database.create_prompt(&input("one", "1", &[])).unwrap();
+        database.create_prompt(&input("two", "2", &[])).unwrap();
+        database.delete_prompt("two").unwrap();
+        database.create_prompt(&input("three", "3", &[])).unwrap();
+
+        assert_eq!(database.get_prompt("one").unwrap().id, 1);
+        assert_eq!(database.get_prompt("three").unwrap().id, 3);
+    }
+
+    #[test]
+    fn filters_prompts_by_tag() {
         let mut database = Database::in_memory().unwrap();
         database
             .create_prompt(&input("alpha", "a", &["coding"]))
@@ -333,14 +318,16 @@ mod tests {
         database
             .create_prompt(&input("beta", "b", &["writing"]))
             .unwrap();
+        let prompts = database
+            .list_prompts_filtered(Some("coding"), false)
+            .unwrap();
         assert_eq!(
-            database.list_prompt_names_with_tag("coding").unwrap(),
+            prompts
+                .into_iter()
+                .map(|prompt| prompt.name)
+                .collect::<Vec<_>>(),
             vec!["alpha"]
         );
-        assert!(database.recent_prompt_names().unwrap().is_empty());
-
-        database.mark_prompt_used("beta").unwrap();
-        assert_eq!(database.recent_prompt_names().unwrap(), vec!["beta"]);
     }
 
     #[test]

@@ -21,6 +21,11 @@ const MIGRATIONS: &[Migration] = &[
         name: "favorites_and_history",
         sql: include_str!("../../migrations/0002_favorites_and_history.sql"),
     },
+    Migration {
+        version: 3,
+        name: "monotonic_prompt_ids",
+        sql: include_str!("../../migrations/0003_monotonic_prompt_ids.sql"),
+    },
 ];
 
 impl Database {
@@ -58,6 +63,7 @@ impl Database {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::db::PromptInput;
     use rusqlite::Connection;
 
     #[test]
@@ -70,11 +76,11 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(count, 2);
+        assert_eq!(count, 3);
     }
 
     #[test]
-    fn second_migration_backfills_existing_prompts() {
+    fn later_migrations_backfill_history_and_seed_prompt_ids() {
         let connection = Connection::open_in_memory().unwrap();
         connection
             .pragma_update(None, "foreign_keys", "ON")
@@ -106,5 +112,16 @@ mod tests {
         assert_eq!(history.len(), 1);
         assert_eq!(history[0].created_at, 2);
         assert!(!database.get_prompt("existing").unwrap().favorite);
+
+        database.delete_prompt("existing").unwrap();
+        database
+            .create_prompt(&PromptInput {
+                name: "new".into(),
+                description: None,
+                content: "body".into(),
+                tags: Vec::new(),
+            })
+            .unwrap();
+        assert_eq!(database.get_prompt("new").unwrap().id, 2);
     }
 }

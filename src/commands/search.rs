@@ -15,7 +15,8 @@ pub fn run(arguments: SearchArgs, database: &Database) -> Result<()> {
                 result.name
             } else {
                 format!(
-                    "{}\t{}",
+                    "{}\t{}\t{}",
+                    result.id,
                     result.name,
                     clean_description(&result.description)
                 )

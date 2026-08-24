@@ -24,7 +24,6 @@ pub fn run() -> Result<()> {
 
 pub fn run_with(cli: Cli) -> Result<()> {
     match cli.command {
-        Command::Check(arguments) => commands::check(arguments),
         Command::Completions(arguments) => commands::completions(arguments),
         command => {
             let database_path = paths::database_path()?;

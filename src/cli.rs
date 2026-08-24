@@ -20,30 +20,20 @@ pub enum Command {
     Edit(NameArgs),
     /// Remove a prompt.
     Rm(RemoveArgs),
-    /// Print a prompt without rendering it.
-    Get(NameArgs),
-    /// Render a prompt with variables and piped input.
-    Render(RenderArgs),
-    /// List prompt names.
+    /// Get a prompt with variables and piped input.
+    Get(GetArgs),
+    /// List prompt IDs and names.
     List(ListArgs),
     /// Search prompt names, descriptions, and bodies.
     Search(SearchArgs),
-    /// List prompts ordered by most recent use.
-    Recent,
-    /// Select a prompt name using fzf.
-    Pick,
     /// Import a Markdown prompt file.
     Import(ImportArgs),
     /// Export a prompt as Markdown.
     Export(ExportArgs),
     /// Add or remove a prompt from favorites.
     Favorite(FavoriteArgs),
-    /// List the saved versions of a prompt.
-    History(NameArgs),
-    /// Diff two saved prompt versions.
-    Diff(DiffArgs),
-    /// Check a Markdown prompt without importing it.
-    Check(CheckArgs),
+    /// Inspect the saved versions of a prompt.
+    History(HistoryArgs),
     /// Generate shell completions.
     Completions(CompletionsArgs),
 }
@@ -70,9 +60,22 @@ pub struct RemoveArgs {
 }
 
 #[derive(Debug, Args)]
-pub struct RenderArgs {
+pub struct GetArgs {
+    /// Prompt name; required unless --id or --pick is used.
     #[arg(add = ArgValueCompleter::new(prompt_name_completer))]
-    pub name: String,
+    #[arg(
+        required_unless_present_any = ["id", "pick"],
+        conflicts_with_all = ["id", "pick"]
+    )]
+    pub name: Option<String>,
+
+    /// Select a prompt by ID instead of providing NAME.
+    #[arg(long, value_parser = clap::value_parser!(i64).range(1..), conflicts_with = "pick")]
+    pub id: Option<i64>,
+
+    /// Select a prompt using fzf instead of providing NAME.
+    #[arg(long)]
+    pub pick: bool,
 
     /// Set a variable as KEY=VALUE.
     #[arg(short = 'v', long = "var", value_name = "KEY=VALUE")]
@@ -145,46 +148,29 @@ pub struct FavoriteArgs {
 }
 
 #[derive(Debug, Args)]
-pub struct DiffArgs {
-    /// Older version as NAME@VERSION.
-    #[arg(add = ArgValueCompleter::new(version_reference_completer))]
-    pub old: VersionReference,
-    /// Newer version as NAME@VERSION.
-    #[arg(add = ArgValueCompleter::new(version_reference_completer))]
-    pub new: VersionReference,
-}
-
-#[derive(Clone, Debug)]
-pub struct VersionReference {
+pub struct HistoryArgs {
+    #[arg(add = ArgValueCompleter::new(prompt_name_completer))]
     pub name: String,
-    pub version: i64,
+
+    #[command(subcommand)]
+    pub command: Option<HistoryCommand>,
 }
 
-impl FromStr for VersionReference {
-    type Err = String;
-
-    fn from_str(value: &str) -> std::result::Result<Self, Self::Err> {
-        let (name, version) = value
-            .rsplit_once('@')
-            .ok_or_else(|| "expected NAME@VERSION".to_owned())?;
-        crate::prompt::validate_name(name).map_err(|error| error.to_string())?;
-        let version = version
-            .parse::<i64>()
-            .map_err(|_| "version must be a positive integer".to_owned())?;
-        if version < 1 {
-            return Err("version must be a positive integer".into());
-        }
-        Ok(Self {
-            name: name.to_owned(),
-            version,
-        })
-    }
+#[derive(Debug, Subcommand)]
+pub enum HistoryCommand {
+    /// Diff two saved versions of this prompt.
+    Diff(HistoryDiffArgs),
 }
 
 #[derive(Debug, Args)]
-pub struct CheckArgs {
-    /// Markdown file to check, or - to read stdin.
-    pub file: PathBuf,
+pub struct HistoryDiffArgs {
+    /// Older version number.
+    #[arg(value_parser = clap::value_parser!(i64).range(1..))]
+    pub old: i64,
+
+    /// Newer version number.
+    #[arg(value_parser = clap::value_parser!(i64).range(1..))]
+    pub new: i64,
 }
 
 #[derive(Debug, Args)]
@@ -276,32 +262,6 @@ fn prompt_name_completer(current: &OsStr) -> Vec<CompletionCandidate> {
     names
         .into_iter()
         .filter(|name| name.starts_with(current))
-        .map(CompletionCandidate::new)
-        .collect()
-}
-
-fn version_reference_completer(current: &OsStr) -> Vec<CompletionCandidate> {
-    let Some(current) = current.to_str() else {
-        return Vec::new();
-    };
-    let Some(database) = completion_database() else {
-        return Vec::new();
-    };
-    let name_prefix = current.split_once('@').map_or(current, |(name, _)| name);
-    let Ok(names) = database.list_prompt_names() else {
-        return Vec::new();
-    };
-    names
-        .into_iter()
-        .filter(|name| name.starts_with(name_prefix))
-        .flat_map(|name| {
-            database
-                .prompt_history(&name)
-                .unwrap_or_default()
-                .into_iter()
-                .map(move |version| format!("{name}@{}", version.version))
-        })
-        .filter(|reference| reference.starts_with(current))
         .map(CompletionCandidate::new)
         .collect()
 }
