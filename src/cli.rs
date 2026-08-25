@@ -80,19 +80,11 @@ pub struct GetArgs {
     /// Set a variable as KEY=VALUE.
     #[arg(short = 'v', long = "var", value_name = "KEY=VALUE")]
     pub variables: Vec<VariableAssignment>,
-
-    /// Read a variable from a UTF-8 file as KEY=PATH.
-    #[arg(long = "file", value_name = "KEY=PATH")]
-    pub files: Vec<FileAssignment>,
 }
 
 #[derive(Debug, Args)]
 pub struct SearchArgs {
     pub query: String,
-
-    /// Print only prompt names, one per line.
-    #[arg(long)]
-    pub name_only: bool,
 }
 
 #[derive(Debug, Args)]
@@ -214,27 +206,6 @@ impl FromStr for VariableAssignment {
         Ok(Self {
             key: key.to_owned(),
             value: value.to_owned(),
-        })
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct FileAssignment {
-    pub key: String,
-    pub path: PathBuf,
-}
-
-impl FromStr for FileAssignment {
-    type Err = String;
-
-    fn from_str(value: &str) -> std::result::Result<Self, Self::Err> {
-        let (key, path) = split_assignment(value)?;
-        if path.is_empty() {
-            return Err("file path must not be empty".into());
-        }
-        Ok(Self {
-            key: key.to_owned(),
-            path: PathBuf::from(path),
         })
     }
 }

@@ -11,16 +11,12 @@ pub fn run(arguments: SearchArgs, database: &Database) -> Result<()> {
     let lines = results
         .into_iter()
         .map(|result| {
-            if arguments.name_only {
-                result.name
-            } else {
-                format!(
-                    "{}\t{}\t{}",
-                    result.id,
-                    result.name,
-                    clean_description(&result.description)
-                )
-            }
+            format!(
+                "{}\t{}\t{}",
+                result.id,
+                result.name,
+                clean_description(&result.description)
+            )
         })
         .collect::<Vec<_>>()
         .join("\n");

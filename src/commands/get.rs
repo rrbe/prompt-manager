@@ -1,6 +1,5 @@
 use std::{
     collections::HashMap,
-    fs,
     io::Write,
     process::{Command, Stdio},
 };
@@ -32,19 +31,6 @@ pub fn run(arguments: GetArgs, database: &mut Database) -> Result<()> {
 
     for variable in arguments.variables {
         insert_value(&mut values, variable.key, variable.value)?;
-    }
-    for file in arguments.files {
-        if values.contains_key(&file.key) {
-            return Err(Error::DuplicateVariableSource(file.key));
-        }
-        let bytes = fs::read(&file.path).map_err(|source| Error::ReadFile {
-            path: file.path.clone(),
-            source,
-        })?;
-        let value = String::from_utf8(bytes).map_err(|_| {
-            Error::Message(format!("file is not valid UTF-8: {}", file.path.display()))
-        })?;
-        values.insert(file.key, value);
     }
 
     let needs_input = template::placeholders(&content)

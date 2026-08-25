@@ -137,32 +137,29 @@ fn non_tty_input_fulfills_input_even_when_empty() {
 }
 
 #[test]
-fn file_variables_render_and_duplicate_sources_fail() {
+fn removed_file_option_is_rejected_and_duplicate_variables_fail() {
     let directory = TempDir::new().unwrap();
     import_prompt(
         directory.path(),
-        "file.md",
-        "---\nname: file-test\n---\n\n{{source}}",
+        "variable.md",
+        "---\nname: variable-test\n---\n\n{{source}}",
     );
-    let source = directory.path().join("source.txt");
-    fs::write(&source, "from file").unwrap();
-    let assignment = format!("source={}", source.display());
 
     pm(directory.path())
-        .args(["get", "file-test", "--file", &assignment])
+        .args(["get", "variable-test", "--file", "source=source.txt"])
         .assert()
-        .success()
-        .stdout("from file")
-        .stderr("");
+        .code(2)
+        .stdout("")
+        .stderr(predicate::str::contains("unexpected argument '--file'"));
 
     pm(directory.path())
         .args([
             "get",
-            "file-test",
+            "variable-test",
             "-v",
-            "source=inline",
-            "--file",
-            &assignment,
+            "source=first",
+            "-v",
+            "source=second",
         ])
         .assert()
         .failure()
@@ -245,9 +242,11 @@ fn list_and_search_have_stable_line_formats() {
     pm(directory.path())
         .args(["search", "Mongo", "--name-only"])
         .assert()
-        .success()
-        .stdout(predicate::str::is_match("^(alpha|beta)\\n(alpha|beta)\\n$").unwrap())
-        .stderr("");
+        .code(2)
+        .stdout("")
+        .stderr(predicate::str::contains(
+            "unexpected argument '--name-only'",
+        ));
 }
 
 #[test]
