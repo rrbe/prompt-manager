@@ -207,7 +207,7 @@ fn export_remove_import_round_trip_preserves_content_and_tags() {
 }
 
 #[test]
-fn list_and_search_have_stable_line_formats() {
+fn list_renders_a_table_and_search_has_a_stable_line_format() {
     let directory = TempDir::new().unwrap();
     import_prompt(
         directory.path(),
@@ -224,13 +224,19 @@ fn list_and_search_have_stable_line_formats() {
         .arg("list")
         .assert()
         .success()
-        .stdout("2\talpha\n1\tbeta\n")
+        .stdout(
+            predicate::str::is_match(
+                "^ID  NAME   UPDATED AT +LAST USE\n──  ─────  ─{16}  ─{8}\n2   alpha  [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}  -\n1   beta   [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}  -\n$",
+            )
+            .unwrap(),
+        )
         .stderr("");
     pm(directory.path())
         .args(["list", "--tag", "coding"])
         .assert()
         .success()
-        .stdout("2\talpha\n")
+        .stdout(predicate::str::contains("ID  NAME   UPDATED AT"))
+        .stdout(predicate::str::contains("\n2   alpha  "))
         .stderr("");
     pm(directory.path())
         .args(["search", "Mongo"])
@@ -250,7 +256,7 @@ fn list_and_search_have_stable_line_formats() {
 }
 
 #[test]
-fn list_supports_long_output_sorting_and_favorite_filters() {
+fn list_supports_sorting_and_favorite_filters() {
     let directory = TempDir::new().unwrap();
     import_prompt(
         directory.path(),
@@ -277,21 +283,15 @@ fn list_supports_long_output_sorting_and_favorite_filters() {
         .args(["list", "--tag", "coding", "--favorite"])
         .assert()
         .success()
-        .stdout("2\tbeta-list\n")
+        .stdout(predicate::str::contains("\n2   beta-list  "))
         .stderr("");
     pm(directory.path())
         .args(["list", "--sort", "used"])
         .assert()
         .success()
-        .stdout("2\tbeta-list\n1\talpha-list\n")
-        .stderr("");
-    pm(directory.path())
-        .args(["list", "--long", "--sort", "used"])
-        .assert()
-        .success()
         .stdout(
             predicate::str::is_match(
-                "^2\\tbeta-list\\t[0-9]{4}-[0-9]{2}-[0-9]{2}T.*Z\\t[0-9]{4}-[0-9]{2}-[0-9]{2}T.*Z\\n1\\talpha-list\\t[0-9]{4}-[0-9]{2}-[0-9]{2}T.*Z\\t-\\n$",
+                "^ID  NAME        UPDATED AT +LAST USE\n[^\n]*\n2   beta-list   [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}  (now|[^\n]+ ago)\n1   alpha-list  [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}  -\n$",
             )
             .unwrap(),
         )

@@ -88,12 +88,12 @@ Prompts can also reference other prompts:
 pm list
 pm list --tag coding
 pm list --favorite
-pm list --long --sort updated
-pm list --long --sort used
+pm list --sort updated
+pm list --sort used
 pm search mongo
 ```
 
-`list` displays stable IDs accepted by `pm get --id ID`. `--sort updated` sorts by update time, `--sort used` sorts by most recent use, and `--long` displays the corresponding timestamps.
+`list` displays stable IDs accepted by `pm get --id ID`, prompt names, local update times to the minute, and relative last-use times in an aligned table. `--sort updated` sorts by update time, and `--sort used` sorts by most recent use.
 
 Use favorites together with `list --favorite`:
 

@@ -22,7 +22,7 @@ pub enum Command {
     Rm(RemoveArgs),
     /// Get a prompt with variables and piped input.
     Get(GetArgs),
-    /// List prompt IDs and names.
+    /// List prompts with edit and usage times.
     List(ListArgs),
     /// Search prompt names, descriptions, and bodies.
     Search(SearchArgs),
@@ -96,10 +96,6 @@ pub struct ListArgs {
     /// List only favorite prompts.
     #[arg(long)]
     pub favorite: bool,
-
-    /// Include updated and last-used timestamps as TSV columns.
-    #[arg(short = 'l', long)]
-    pub long: bool,
 
     /// Sort the result.
     #[arg(long, value_enum, default_value_t = ListSort::Name)]
