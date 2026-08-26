@@ -1,6 +1,6 @@
 [package]
 name = "prompt-manager"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 description = "A small, local, pipe-friendly prompt manager"
 repository = "https://github.com/rrbe/prompt-manager"
