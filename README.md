@@ -1,20 +1,20 @@
 # PM
 
-`pm` 是一个本地、Pipe 友好的命令行 Prompt Manager，使用 SQLite 保存和搜索可复用的 Prompt。
+`pm` is a local, pipe-friendly command-line prompt manager that uses SQLite to store and search reusable prompts.
 
-## 安装
+## Installation
 
-需要 Rust stable toolchain。SQLite 已静态编译，不需要安装系统 SQLite library。
+The stable Rust toolchain is required. SQLite is bundled, so no system SQLite library is needed.
 
 ```bash
-make install                                  # 默认安装到 /usr/local/bin
-make install INSTALL_DIR="$HOME/.local/bin" # 安装到用户目录
-cargo install --path .                        # 安装到 ~/.cargo/bin
+make install                                  # Install to /usr/local/bin by default
+make install INSTALL_DIR="$HOME/.local/bin" # Install to a user directory
+cargo install --path .                        # Install to ~/.cargo/bin
 ```
 
-`make install` 不会自动调用 `sudo`。
+`make install` does not invoke `sudo` automatically.
 
-## 快速开始
+## Quick Start
 
 ```bash
 pm add code-review
@@ -25,9 +25,9 @@ pm edit code-review
 pm rm code-review
 ```
 
-`add` 和 `edit` 按 `$VISUAL`、`$EDITOR`、`vi` 的优先级选择编辑器。`rm` 默认要求终端确认，使用 `--force` 可跳过确认。
+`add` and `edit` select an editor in this order: `$VISUAL`, `$EDITOR`, then `vi`. `rm` asks for terminal confirmation by default; use `--force` to skip it.
 
-编辑器中的 Prompt 使用 Markdown 和 YAML front matter：
+Prompts use Markdown with YAML front matter:
 
 ```markdown
 ---
@@ -43,11 +43,11 @@ Review the following code:
 {{input}}
 ```
 
-`name` 必须唯一；`description` 和 `tags` 可选。修改 `name` 会同时重命名 Prompt。
+`name` must be unique; `description` and `tags` are optional. Changing `name` also renames the prompt.
 
-## 获取与模板
+## Retrieval and Templates
 
-可以通过名称、`list` 显示的 ID，或者外部 `fzf` 选择 Prompt：
+Select a prompt by name, by the ID shown by `list`, or with the external `fzf` command:
 
 ```bash
 pm get code-review
@@ -55,7 +55,7 @@ pm get --id 1
 pm get --pick
 ```
 
-使用 `-v` 为模板变量赋值：
+Use `-v` to assign template variables:
 
 ```bash
 pm get code-review \
@@ -63,14 +63,14 @@ pm get code-review \
   -v focus=correctness
 ```
 
-Prompt 中的 `{{input}}` 从 stdin 获取内容，因此可以直接组合其他命令：
+`{{input}}` reads from stdin, so `pm` composes directly with other commands:
 
 ```bash
 some-command | pm get code-review | codex exec -
 pm get code-review | claude -p
 ```
 
-Prompt 还可以引用其他 Prompt：
+Prompts can also reference other prompts:
 
 ```text
 {{prompt:senior-engineer}}
@@ -80,9 +80,9 @@ Prompt 还可以引用其他 Prompt：
 {{input}}
 ```
 
-`get` 会先展开引用，再替换变量。引用不存在、形成循环或缺少变量时命令失败。
+`get` expands references before substituting variables. The command fails when a reference is missing, references form a cycle, or a variable has no value.
 
-## 列表与搜索
+## Listing and Search
 
 ```bash
 pm list
@@ -93,25 +93,25 @@ pm list --long --sort used
 pm search mongo
 ```
 
-`list` 会显示可供 `pm get --id ID` 使用的稳定 ID。`--sort updated` 按更新时间排序，`--sort used` 按最近使用时间排序，`--long` 显示对应时间。
+`list` displays stable IDs accepted by `pm get --id ID`. `--sort updated` sorts by update time, `--sort used` sorts by most recent use, and `--long` displays the corresponding timestamps.
 
-收藏可以配合 `list --favorite` 使用：
+Use favorites together with `list --favorite`:
 
 ```bash
 pm favorite code-review
 pm favorite code-review --remove
 ```
 
-## 历史
+## History
 
-创建和每次有实际内容或 metadata 变化的编辑都会生成版本；无变化的编辑不会生成新版本。
+Creating a prompt and editing its content or metadata creates a version. An edit with no changes does not create a new version.
 
 ```bash
 pm history code-review
 pm history code-review diff 1 3
 ```
 
-## Import 与 Export
+## Import and Export
 
 ```bash
 pm export code-review > code-review.md
@@ -119,27 +119,27 @@ pm import code-review.md
 pm export --all ./prompts/
 ```
 
-Import 名称冲突时不会覆盖已有 Prompt。
+Importing a prompt whose name already exists does not overwrite the existing prompt.
 
 ## Shell Completion
 
-生成 bash、zsh 或 fish 的静态补全脚本：
+Generate static completion scripts for Bash, Zsh, or Fish:
 
 ```bash
 pm completions zsh > _pm
 ```
 
-动态补全还会从 SQLite 读取 Prompt 名称：
+Dynamic completion also reads prompt names from SQLite:
 
 ```bash
 pm completions zsh --dynamic > _pm
 ```
 
-## 数据存储
+## Data Storage
 
-数据库默认位于 `$HOME/.local/share/pm/pm.db`；设置 `XDG_DATA_HOME` 后使用 `$XDG_DATA_HOME/pm/pm.db`。
+The database is stored at `$HOME/.local/share/pm/pm.db` by default. When `XDG_DATA_HOME` is set, it uses `$XDG_DATA_HOME/pm/pm.db` instead.
 
-## 开发
+## Development
 
 ```bash
 make fmt
@@ -147,4 +147,4 @@ make check
 make build-release
 ```
 
-查看完整命令和参数请使用 `pm --help` 或 `pm <command> --help`。
+Run `pm --help` or `pm <command> --help` to see all commands and options.

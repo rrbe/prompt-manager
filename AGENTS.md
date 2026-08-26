@@ -18,6 +18,10 @@ This repository builds the Rust CLI binary `pm`. `src/main.rs` is the executable
 
 Follow standard Rust formatting and four-space indentation; do not hand-align code against `rustfmt`. Use `snake_case` for modules, functions, variables, and test names; use `UpperCamelCase` for structs and enums. Keep command parsing in `cli.rs`, behavior in the matching command module, and persistence logic in `db/`. Preserve the Pipe-first contract: stdout contains command data, while diagnostics and prompts go to stderr.
 
+## Language Guidelines
+
+Use English by default for all project documentation, including the README, contributor guides, code comments, and examples. Write Git commit subjects and bodies in English. Use English for pull request titles, descriptions, and review notes unless a specific task explicitly requires another language.
+
 ## Testing Guidelines
 
 Use ordinary Rust `#[test]` functions for focused logic. Use `assert_cmd`, `predicates`, and `tempfile` in `tests/cli.rs` for observable CLI behavior and isolated databases. Name tests after behavior, such as `gets_prompt_by_id`. There is no numeric coverage threshold; every behavior change or bug fix should include a regression test. Add new schema changes as sequential files under `migrations/` and test both fresh and upgraded databases.
