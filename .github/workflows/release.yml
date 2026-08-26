@@ -4,9 +4,18 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to build
+        required: true
+        type: string
 
 permissions:
   contents: read
+
+env:
+  RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
 
 jobs:
   validate:
@@ -14,12 +23,14 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.RELEASE_TAG }}
       - name: Match Tag to Cargo Version
         shell: bash
         run: |
           version="$(sed -n 's/^version = "\([^"]*\)"$/\1/p' Cargo.toml | head -n 1)"
-          if [[ -z "${version}" || "${GITHUB_REF_NAME}" != "v${version}" ]]; then
-            echo "tag ${GITHUB_REF_NAME} does not match Cargo version ${version}" >&2
+          if [[ -z "${version}" || "${RELEASE_TAG}" != "v${version}" ]]; then
+            echo "tag ${RELEASE_TAG} does not match Cargo version ${version}" >&2
             exit 1
           fi
 
@@ -42,6 +53,8 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.RELEASE_TAG }}
       - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772
         with:
           toolchain: stable
@@ -53,7 +66,9 @@ jobs:
         if: matrix.cross
         run: |
           sudo apt-get update
-          sudo apt-get install --no-install-recommends --yes gcc-aarch64-linux-gnu
+          sudo apt-get install --no-install-recommends --yes \
+            gcc-aarch64-linux-gnu \
+            libc6-dev-arm64-cross
       - name: Build Natively
         if: ${{ !matrix.cross }}
         run: cargo build --locked --release --target "${{ matrix.target }}"
@@ -66,7 +81,7 @@ jobs:
       - name: Package
         shell: bash
         run: |
-          package="pm-${GITHUB_REF_NAME}-${{ matrix.target }}"
+          package="pm-${RELEASE_TAG}-${{ matrix.target }}"
           mkdir -p "dist/${package}"
           cp "target/${{ matrix.target }}/release/pm" "dist/${package}/pm"
           cp LICENSE README.md "dist/${package}/"
@@ -99,4 +114,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: gh release create "${GITHUB_REF_NAME}" dist/* --generate-notes --verify-tag
+        run: gh release create "${RELEASE_TAG}" dist/* --generate-notes --verify-tag
