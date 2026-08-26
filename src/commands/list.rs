@@ -5,10 +5,10 @@ use crate::{
 };
 use std::time::Duration;
 
-use time::{OffsetDateTime, UtcOffset, format_description::well_known::Rfc3339};
+use time::{OffsetDateTime, UtcOffset};
 use timeago::{Formatter, TimeUnit};
 
-use super::write_stdout;
+use super::{current_local_offset, format_local_timestamp, format_table, write_stdout};
 
 pub fn run(arguments: ListArgs, database: &Database) -> Result<()> {
     let tag = match arguments.tag {
@@ -28,8 +28,7 @@ pub fn run(arguments: ListArgs, database: &Database) -> Result<()> {
     }
 
     let now = OffsetDateTime::now_utc().unix_timestamp();
-    let local_offset = UtcOffset::current_local_offset()
-        .map_err(|error| Error::Message(format!("failed to determine local time: {error}")))?;
+    let local_offset = current_local_offset()?;
     write_stdout(&render_table(&prompts, now, local_offset)?)
 }
 
@@ -52,40 +51,7 @@ fn render_table(prompts: &[PromptListEntry], now: i64, local_offset: UtcOffset) 
             ])
         })
         .collect::<Result<Vec<_>>>()?;
-    let widths = std::array::from_fn(|column| {
-        rows.iter()
-            .map(|row| row[column].chars().count())
-            .chain([HEADERS[column].chars().count()])
-            .max()
-            .unwrap_or_default()
-    });
-
-    let mut lines = Vec::with_capacity(rows.len() + 2);
-    lines.push(format_row(&HEADERS, &widths));
-    lines.push(
-        widths
-            .iter()
-            .map(|width| "─".repeat(*width))
-            .collect::<Vec<_>>()
-            .join("  "),
-    );
-    lines.extend(rows.iter().map(|row| format_row(row, &widths)));
-    Ok(format!("{}\n", lines.join("\n")))
-}
-
-fn format_row<S: AsRef<str>>(columns: &[S; 4], widths: &[usize; 4]) -> String {
-    columns
-        .iter()
-        .enumerate()
-        .map(|(index, value)| {
-            let value = value.as_ref();
-            let padding = widths[index] - value.chars().count();
-            format!("{value}{}", " ".repeat(padding))
-        })
-        .collect::<Vec<_>>()
-        .join("  ")
-        .trim_end()
-        .to_owned()
+    Ok(format_table(&HEADERS, &rows))
 }
 
 fn sort(prompts: &mut [PromptListEntry], sort: ListSort) {
@@ -105,27 +71,6 @@ fn sort(prompts: &mut [PromptListEntry], sort: ListSort) {
 fn format_relative_timestamp(timestamp: i64, now: i64, formatter: &Formatter) -> String {
     let elapsed = now.saturating_sub(timestamp).max(0) as u64;
     formatter.convert(Duration::from_secs(elapsed))
-}
-
-fn format_local_timestamp(timestamp: i64, local_offset: UtcOffset) -> Result<String> {
-    let timestamp = OffsetDateTime::from_unix_timestamp(timestamp)
-        .map_err(|_| Error::Message(format!("timestamp is out of range: {timestamp}")))?
-        .to_offset(local_offset);
-    Ok(format!(
-        "{:04}-{:02}-{:02} {:02}:{:02}",
-        timestamp.year(),
-        timestamp.month() as u8,
-        timestamp.day(),
-        timestamp.hour(),
-        timestamp.minute()
-    ))
-}
-
-pub(super) fn format_timestamp(timestamp: i64) -> Result<String> {
-    OffsetDateTime::from_unix_timestamp(timestamp)
-        .map_err(|_| Error::Message(format!("timestamp is out of range: {timestamp}")))?
-        .format(&Rfc3339)
-        .map_err(|error| Error::Message(format!("failed to format timestamp: {error}")))
 }
 
 #[cfg(test)]

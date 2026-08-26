@@ -111,6 +111,8 @@ pm history code-review
 pm history code-review diff 1 3
 ```
 
+History lists versions in an aligned table. Its timestamps use local time to the minute, matching `pm list`.
+
 ## Import and Export
 
 ```bash

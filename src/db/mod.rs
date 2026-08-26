@@ -4,13 +4,10 @@ mod prompts;
 mod search;
 mod tags;
 
-use std::{
-    fs,
-    path::Path,
-    time::{Duration, SystemTime, UNIX_EPOCH},
-};
+use std::{fs, path::Path, time::Duration};
 
 use rusqlite::{Connection, OpenFlags};
+use time::OffsetDateTime;
 
 use crate::error::Result;
 
@@ -52,8 +49,5 @@ impl Database {
 }
 
 pub(crate) fn now_timestamp() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs() as i64
+    OffsetDateTime::now_utc().unix_timestamp()
 }

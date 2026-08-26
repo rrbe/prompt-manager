@@ -374,7 +374,7 @@ fn history_and_diff_include_atomic_edit_versions() {
         .success()
         .stdout(
             predicate::str::is_match(
-                "^2\\t[0-9]{4}-.*Z\\tversioned\\n1\\t[0-9]{4}-.*Z\\tversioned\\n$",
+                "^VERSION  CREATED AT +NAME\\n─{7}  ─{16}  ─{9}\\n2 +[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}  versioned\\n1 +[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}  versioned\\n$",
             )
             .unwrap(),
         )

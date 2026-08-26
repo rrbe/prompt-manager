@@ -10,7 +10,7 @@ use crate::{
     },
 };
 
-use super::{list::format_timestamp, write_stdout};
+use super::{current_local_offset, format_local_timestamp, format_table, write_stdout};
 
 pub fn run(arguments: HistoryArgs, database: &Database) -> Result<()> {
     validate_name(&arguments.name)?;
@@ -21,22 +21,24 @@ pub fn run(arguments: HistoryArgs, database: &Database) -> Result<()> {
 }
 
 fn list_versions(name: &str, database: &Database) -> Result<()> {
+    const HEADERS: [&str; 3] = ["VERSION", "CREATED AT", "NAME"];
+
     let versions = database.prompt_history(name)?;
-    let lines = versions
-        .into_iter()
-        .map(|version| {
-            Ok(format!(
-                "{}\t{}\t{}",
-                version.version,
-                format_timestamp(version.created_at)?,
-                version.name
-            ))
-        })
-        .collect::<Result<Vec<_>>>()?;
-    if lines.is_empty() {
+    if versions.is_empty() {
         return Ok(());
     }
-    write_stdout(&format!("{}\n", lines.join("\n")))
+    let local_offset = current_local_offset()?;
+    let rows = versions
+        .into_iter()
+        .map(|version| {
+            Ok([
+                version.version.to_string(),
+                format_local_timestamp(version.created_at, local_offset)?,
+                version.name,
+            ])
+        })
+        .collect::<Result<Vec<_>>>()?;
+    write_stdout(&format_table(&HEADERS, &rows))
 }
 
 fn diff_versions(name: &str, arguments: HistoryDiffArgs, database: &Database) -> Result<()> {
