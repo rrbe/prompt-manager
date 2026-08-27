@@ -105,13 +105,38 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: pm-*
           path: dist
           merge-multiple: true
+      - name: Generate Release Notes from Commits
+        shell: bash
+        run: |
+          previous_tag="$(git describe --tags --match 'v[0-9]*' --abbrev=0 "${RELEASE_TAG}^" 2>/dev/null || true)"
+          if [[ -n "${previous_tag}" ]]; then
+            commit_range="${previous_tag}..${RELEASE_TAG}"
+          else
+            commit_range="${RELEASE_TAG}"
+          fi
+
+          {
+            echo "## Changes"
+            echo
+            git log \
+              --format="- %s ([%h](https://github.com/${GITHUB_REPOSITORY}/commit/%H))" \
+              "${commit_range}"
+            if [[ -n "${previous_tag}" ]]; then
+              echo
+              echo "**Full Changelog**: https://github.com/${GITHUB_REPOSITORY}/compare/${previous_tag}...${RELEASE_TAG}"
+            fi
+          } > release-notes.md
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: gh release create "${RELEASE_TAG}" dist/* --generate-notes --verify-tag
+        run: gh release create "${RELEASE_TAG}" dist/* --notes-file release-notes.md --verify-tag

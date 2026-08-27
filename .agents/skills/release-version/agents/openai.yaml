@@ -1,0 +1,4 @@
+interface:
+  display_name: "Release Version"
+  short_description: "Publish and verify a prompt-manager release"
+  default_prompt: "Use $release-version to publish version 0.2.1 and verify the GitHub Release."
