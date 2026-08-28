@@ -35,6 +35,10 @@ pub enum Command {
     /// Inspect the saved versions of a prompt.
     History(HistoryArgs),
     /// Generate shell completions.
+    #[command(
+        long_about = "Generate shell completions.\n\nThe generated script is written to stdout and is not installed automatically. Without --dynamic, it completes commands and options. With --dynamic, it also reads Prompt names from SQLite at completion time. Regenerate installed scripts after upgrading or moving pm.",
+        after_long_help = "Examples:\n  # Preview static Zsh completions\n  pm completions zsh | less\n\n  # Install dynamic Zsh completions\n  mkdir -p ~/.zfunc\n  pm completions zsh --dynamic > ~/.zfunc/_pm\n  # Add `fpath=(~/.zfunc $fpath)` before `compinit` in ~/.zshrc.\n\n  # Install dynamic Bash completions (requires bash-completion)\n  mkdir -p ~/.local/share/bash-completion/completions\n  pm completions bash --dynamic > ~/.local/share/bash-completion/completions/pm\n\n  # Install dynamic Fish completions\n  mkdir -p ~/.config/fish/completions\n  pm completions fish --dynamic > ~/.config/fish/completions/pm.fish\n\n  # Alternatively, load dynamic Zsh completions on every shell startup\n  source <(pm completions zsh --dynamic)"
+    )]
     Completions(CompletionsArgs),
 }
 

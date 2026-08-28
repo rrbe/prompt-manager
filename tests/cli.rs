@@ -464,6 +464,26 @@ fn dynamic_completion_reads_prompt_names_from_the_database() {
 }
 
 #[test]
+fn completions_help_explains_generation_and_installation() {
+    let directory = TempDir::new().unwrap();
+    pm(directory.path())
+        .args(["completions", "--help"])
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("written to stdout")
+                .and(predicate::str::contains("pm completions zsh --dynamic"))
+                .and(predicate::str::contains(
+                    "~/.local/share/bash-completion/completions/pm",
+                ))
+                .and(predicate::str::contains(
+                    "~/.config/fish/completions/pm.fish",
+                )),
+        )
+        .stderr("");
+}
+
+#[test]
 fn completions_do_not_open_the_database() {
     let directory = TempDir::new().unwrap();
     pm(directory.path())
