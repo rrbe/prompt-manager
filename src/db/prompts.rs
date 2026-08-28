@@ -1,4 +1,4 @@
-use rusqlite::{OptionalExtension, Transaction, params};
+use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
 use crate::error::{Error, Result};
 
@@ -35,6 +35,10 @@ pub struct PromptListEntry {
 }
 
 impl Database {
+    pub fn prompt_exists(&self, name: &str) -> Result<bool> {
+        Ok(prompt_id(&self.connection, name)?.is_some())
+    }
+
     pub fn create_prompt(&mut self, input: &PromptInput) -> Result<()> {
         let transaction = self.connection.transaction()?;
         if prompt_id(&transaction, &input.name)?.is_some() {
@@ -179,8 +183,8 @@ impl Database {
     }
 }
 
-fn prompt_id(transaction: &Transaction<'_>, name: &str) -> Result<Option<i64>> {
-    transaction
+fn prompt_id(connection: &Connection, name: &str) -> Result<Option<i64>> {
+    connection
         .query_row("SELECT id FROM prompts WHERE name = ?1", [name], |row| {
             row.get(0)
         })

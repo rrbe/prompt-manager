@@ -569,6 +569,35 @@ fn missing_prompt_and_unforced_non_tty_remove_fail_cleanly() {
 
 #[cfg(unix)]
 #[test]
+fn add_rejects_an_existing_name_before_opening_the_editor() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let directory = TempDir::new().unwrap();
+    import_prompt(
+        directory.path(),
+        "existing.md",
+        "---\nname: existing\n---\n\nbody",
+    );
+
+    let marker = directory.path().join("editor-opened");
+    let editor = directory.path().join("editor.sh");
+    fs::write(&editor, "#!/bin/sh\ntouch \"$EDITOR_MARKER\"\n").unwrap();
+    fs::set_permissions(&editor, fs::Permissions::from_mode(0o700)).unwrap();
+
+    pm(directory.path())
+        .env("VISUAL", &editor)
+        .env("EDITOR_MARKER", &marker)
+        .args(["add", "existing"])
+        .assert()
+        .failure()
+        .code(1)
+        .stdout("")
+        .stderr(predicate::str::contains("prompt already exists: existing"));
+    assert!(!marker.exists());
+}
+
+#[cfg(unix)]
+#[test]
 fn add_and_edit_use_an_external_editor_and_protect_original_on_failure() {
     use std::os::unix::fs::PermissionsExt;
 
