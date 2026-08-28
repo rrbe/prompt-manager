@@ -21,6 +21,9 @@ pub enum Command {
     /// Remove a prompt.
     Rm(RemoveArgs),
     /// Get a prompt with variables and piped input.
+    #[command(
+        after_long_help = "Examples:\n  # Start an interactive Codex session with a stored prompt\n  codex \"$(pm get prompt-name)\"\n\n  # Run a stored prompt non-interactively with Codex Exec\n  pm get prompt-name | codex exec -"
+    )]
     Get(GetArgs),
     /// List prompts with edit and usage times.
     List(ListArgs),

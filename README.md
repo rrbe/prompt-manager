@@ -21,6 +21,7 @@ pm add code-review
 pm list
 pm get code-review
 pm get code-review | codex exec -
+codex "$(pm get prompt-name)"
 pm edit code-review
 pm rm code-review
 ```
@@ -61,6 +62,13 @@ Use `-v` to assign template variables:
 pm get code-review \
   -v language=rust \
   -v focus=correctness
+```
+
+Send a stored prompt to Codex as an interactive initial prompt or through non-interactive `codex exec`:
+
+```bash
+codex "$(pm get prompt-name)"
+pm get prompt-name | codex exec -
 ```
 
 `{{input}}` reads from stdin, so `pm` composes directly with other commands:

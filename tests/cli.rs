@@ -464,6 +464,21 @@ fn dynamic_completion_reads_prompt_names_from_the_database() {
 }
 
 #[test]
+fn get_help_shows_codex_usage_examples() {
+    let directory = TempDir::new().unwrap();
+    pm(directory.path())
+        .args(["get", "--help"])
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("codex \"$(pm get prompt-name)\"").and(
+                predicate::str::contains("pm get prompt-name | codex exec -"),
+            ),
+        )
+        .stderr("");
+}
+
+#[test]
 fn completions_help_explains_generation_and_installation() {
     let directory = TempDir::new().unwrap();
     pm(directory.path())
