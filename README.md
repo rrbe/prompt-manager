@@ -2,6 +2,18 @@
 
 `pm` is a local, pipe-friendly command-line prompt manager that uses SQLite to store and search reusable prompts.
 
+TLDR:
+
+```bash
+pm add work/code-review                   # save prompt，/ is the optional grouping separator
+pm list                                   # list saved prompts
+pm get code-review                        # print the prompt `code-review` to stdio
+pm get code-review | codex exec -
+codex "$(pm get prompt-name)"
+pm edit code-review
+pm rm code-review
+```
+
 ## Installation
 
 The stable Rust toolchain is required. SQLite is bundled, so no system SQLite library is needed.
@@ -148,6 +160,23 @@ Dynamic completion also reads prompt names from SQLite:
 ```bash
 pm completions zsh --dynamic > _pm
 ```
+
+## Updating
+
+Check GitHub Releases for a newer version without changing the installed binary:
+
+```bash
+pm update --check
+```
+
+Download the release archive for the current platform, verify its published SHA-256 checksum, and replace the current binary:
+
+```bash
+pm update
+```
+
+Update status is written to stderr, leaving stdout available for pipelines. The command does not modify the prompt database.
+If GitHub's anonymous API rate limit is exhausted, set `GH_TOKEN` or `GITHUB_TOKEN` before retrying.
 
 ## Data Storage
 

@@ -37,6 +37,8 @@ pub enum Command {
     Favorite(FavoriteArgs),
     /// Inspect the saved versions of a prompt.
     History(HistoryArgs),
+    /// Check for or install the latest pm release.
+    Update(UpdateArgs),
     /// Generate shell completions.
     #[command(
         long_about = "Generate shell completions.\n\nThe generated script is written to stdout and is not installed automatically. Without --dynamic, it completes commands and options. With --dynamic, it also reads Prompt names from SQLite at completion time. Regenerate installed scripts after upgrading or moving pm.",
@@ -173,6 +175,13 @@ pub struct HistoryDiffArgs {
 }
 
 #[derive(Debug, Args)]
+pub struct UpdateArgs {
+    /// Check for a newer release without installing it.
+    #[arg(long)]
+    pub check: bool,
+}
+
+#[derive(Debug, Args)]
 pub struct CompletionsArgs {
     #[arg(value_enum)]
     pub shell: CompletionShell,
@@ -267,5 +276,14 @@ mod tests {
     fn rejects_invalid_assignment() {
         assert!("not-an-assignment".parse::<VariableAssignment>().is_err());
         assert!("1key=value".parse::<VariableAssignment>().is_err());
+    }
+
+    #[test]
+    fn parses_update_check() {
+        let cli = Cli::try_parse_from(["pm", "update", "--check"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::Update(UpdateArgs { check: true })
+        ));
     }
 }

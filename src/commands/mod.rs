@@ -9,6 +9,7 @@ mod import;
 mod list;
 mod remove;
 mod search;
+mod update;
 
 use std::{
     env,
@@ -19,7 +20,7 @@ use std::{
 use time::{OffsetDateTime, UtcOffset};
 
 use crate::{
-    cli::{Command, CompletionsArgs},
+    cli::{Command, CompletionsArgs, UpdateArgs},
     db::{Database, Prompt, PromptInput},
     error::{Error, Result},
     prompt::markdown::PromptDocument,
@@ -27,6 +28,10 @@ use crate::{
 
 pub fn completions(arguments: CompletionsArgs) -> Result<()> {
     completions::run(arguments)
+}
+
+pub fn update(arguments: UpdateArgs) -> Result<()> {
+    update::run(arguments)
 }
 
 pub fn execute(command: Command, database: &mut Database) -> Result<()> {
@@ -41,7 +46,7 @@ pub fn execute(command: Command, database: &mut Database) -> Result<()> {
         Command::Export(arguments) => export::run(arguments, database),
         Command::Favorite(arguments) => favorite::run(arguments, database),
         Command::History(arguments) => history::run(arguments, database),
-        Command::Completions(_) => {
+        Command::Completions(_) | Command::Update(_) => {
             unreachable!("standalone command reached database dispatcher")
         }
     }
