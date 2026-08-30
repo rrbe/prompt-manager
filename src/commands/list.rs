@@ -9,7 +9,7 @@ use std::time::Duration;
 use time::{OffsetDateTime, UtcOffset};
 use timeago::{Formatter, TimeUnit};
 
-use super::{current_local_offset, format_local_timestamp, format_table, write_stdout};
+use super::{current_local_offset, format_local_timestamp, format_table, write_paged_stdout};
 
 pub fn run(arguments: ListArgs, database: &Database) -> Result<()> {
     if let Some(group) = arguments.group.as_deref() {
@@ -37,7 +37,7 @@ pub fn run(arguments: ListArgs, database: &Database) -> Result<()> {
 
     let now = OffsetDateTime::now_utc().unix_timestamp();
     let local_offset = current_local_offset()?;
-    write_stdout(&render_table(&prompts, now, local_offset)?)
+    write_paged_stdout(&render_table(&prompts, now, local_offset)?)
 }
 
 fn render_table(prompts: &[PromptListEntry], now: i64, local_offset: UtcOffset) -> Result<String> {

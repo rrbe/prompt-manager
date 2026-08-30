@@ -10,7 +10,11 @@ mod list;
 mod remove;
 mod search;
 
-use std::io::{self, Write};
+use std::{
+    env,
+    io::{self, IsTerminal, Write},
+    process::{Command as ProcessCommand, Stdio},
+};
 
 use time::{OffsetDateTime, UtcOffset};
 
@@ -49,6 +53,64 @@ fn write_stdout(value: &str) -> Result<()> {
     output.write_all(value.as_bytes())?;
     output.flush()?;
     Ok(())
+}
+
+fn write_paged_stdout(value: &str) -> Result<()> {
+    if !io::stdout().is_terminal() {
+        return write_stdout(value);
+    }
+
+    let command = pager_command()?;
+    if !write_to_pager(value, &command)? {
+        return write_stdout(value);
+    }
+    Ok(())
+}
+
+fn write_to_pager(value: &str, command: &[String]) -> Result<bool> {
+    let (program, arguments) = command
+        .split_first()
+        .expect("pager command always contains a program");
+    let mut pager = match ProcessCommand::new(program)
+        .args(arguments)
+        .stdin(Stdio::piped())
+        .spawn()
+    {
+        Ok(pager) => pager,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(error.into()),
+    };
+
+    let write_result = pager
+        .stdin
+        .take()
+        .expect("pager stdin is piped")
+        .write_all(value.as_bytes());
+    let status = pager.wait()?;
+
+    if let Err(error) = write_result {
+        if error.kind() == io::ErrorKind::BrokenPipe {
+            return Ok(true);
+        }
+        return Err(error.into());
+    }
+    if !status.success() {
+        return Err(Error::Message(format!("pager exited with status {status}")));
+    }
+    Ok(true)
+}
+
+fn pager_command() -> Result<Vec<String>> {
+    let value = env::var("PAGER")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| "less -FRX".into());
+    let command = shell_words::split(&value)
+        .map_err(|error| Error::Message(format!("invalid pager command: {error}")))?;
+    if command.is_empty() {
+        return Err(Error::Message("pager command must not be empty".into()));
+    }
+    Ok(command)
 }
 
 fn current_local_offset() -> Result<UtcOffset> {
@@ -128,5 +190,28 @@ fn prompt_to_document(prompt: Prompt) -> PromptDocument {
         description: prompt.description,
         tags: prompt.tags,
         content: prompt.content,
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use std::fs;
+
+    use super::*;
+
+    #[test]
+    fn sends_output_to_pager_stdin() {
+        let directory = tempfile::tempdir().unwrap();
+        let destination = directory.path().join("paged-output");
+        let command = vec![
+            "sh".to_owned(),
+            "-c".to_owned(),
+            "cat > \"$1\"".to_owned(),
+            "pager".to_owned(),
+            destination.to_string_lossy().into_owned(),
+        ];
+
+        assert!(write_to_pager("paged output\n", &command).unwrap());
+        assert_eq!(fs::read_to_string(destination).unwrap(), "paged output\n");
     }
 }

@@ -222,6 +222,7 @@ fn list_renders_a_table_and_search_has_a_stable_line_format() {
 
     pm(directory.path())
         .arg("list")
+        .env("PAGER", "false")
         .assert()
         .success()
         .stdout(

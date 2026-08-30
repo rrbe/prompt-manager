@@ -105,6 +105,8 @@ pm search mongo
 
 `list` displays stable IDs accepted by `pm get --id ID`, prompt names, local update times to the minute, and relative last-use times in an aligned table. Pass a group ending in `/`, such as `pm list work/`, to recursively list prompts in that group while keeping their full names. Nested groups are supported. `--sort updated` sorts by update time, and `--sort used` sorts by most recent use.
 
+When stdout is a terminal, `list` sends its table through `$PAGER`, or `less -FRX` when `$PAGER` is unset. Piped and redirected output remains complete plain text. Set `PAGER=cat` to disable interactive paging.
+
 Use favorites together with `list --favorite`:
 
 ```bash
