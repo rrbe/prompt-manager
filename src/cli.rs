@@ -96,6 +96,10 @@ pub struct SearchArgs {
 
 #[derive(Debug, Args)]
 pub struct ListArgs {
+    /// List only prompts in this group; include the trailing slash.
+    #[arg(value_name = "GROUP/")]
+    pub group: Option<String>,
+
     /// List only prompts with this tag.
     #[arg(long)]
     pub tag: Option<String>,

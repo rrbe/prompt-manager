@@ -33,7 +33,11 @@ fn export_all(arguments: ExportArgs, database: &mut Database) -> Result<()> {
         let prompt = database.get_prompt(&name)?;
         let markdown = markdown::export(&prompt_to_document(prompt))?;
         let destination = arguments.target.join(format!("{name}.md"));
-        atomic_write(&arguments.target, &destination, &markdown)?;
+        let directory = destination
+            .parent()
+            .expect("export destination always has a parent");
+        fs::create_dir_all(directory)?;
+        atomic_write(directory, &destination, &markdown)?;
     }
     Ok(())
 }

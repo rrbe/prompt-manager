@@ -256,6 +256,51 @@ fn list_renders_a_table_and_search_has_a_stable_line_format() {
 }
 
 #[test]
+fn list_filters_prompts_by_group_prefix() {
+    let directory = TempDir::new().unwrap();
+    import_prompt(
+        directory.path(),
+        "weekly.md",
+        "---\nname: work/week-report\n---\n\nweekly",
+    );
+    import_prompt(
+        directory.path(),
+        "monthly.md",
+        "---\nname: work/month-report\n---\n\nmonthly",
+    );
+    import_prompt(
+        directory.path(),
+        "personal.md",
+        "---\nname: personal/week-report\n---\n\npersonal",
+    );
+    import_prompt(
+        directory.path(),
+        "workbench.md",
+        "---\nname: workbench/report\n---\n\nworkbench",
+    );
+
+    pm(directory.path())
+        .args(["list", "work/"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("work/month-report"))
+        .stdout(predicate::str::contains("work/week-report"))
+        .stdout(predicate::str::contains("personal/week-report").not())
+        .stdout(predicate::str::contains("workbench/report").not())
+        .stderr("");
+
+    pm(directory.path())
+        .args(["list", "work"])
+        .assert()
+        .failure()
+        .code(1)
+        .stdout("")
+        .stderr(predicate::str::contains(
+            "prompt group must end with '/': work",
+        ));
+}
+
+#[test]
 fn list_supports_sorting_and_favorite_filters() {
     let directory = TempDir::new().unwrap();
     import_prompt(
@@ -322,6 +367,11 @@ fn export_all_writes_one_markdown_file_per_prompt() {
         "two.md",
         "---\nname: export-two\n---\n\ntwo",
     );
+    import_prompt(
+        directory.path(),
+        "grouped.md",
+        "---\nname: work/week-report\n---\n\ngrouped",
+    );
     let output = directory.path().join("backup");
 
     for _ in 0..2 {
@@ -341,6 +391,11 @@ fn export_all_writes_one_markdown_file_per_prompt() {
         fs::read_to_string(output.join("export-two.md"))
             .unwrap()
             .ends_with("\n\ntwo")
+    );
+    assert!(
+        fs::read_to_string(output.join("work/week-report.md"))
+            .unwrap()
+            .ends_with("\n\ngrouped")
     );
 }
 

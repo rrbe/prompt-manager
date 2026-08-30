@@ -18,6 +18,7 @@ cargo install --path .                        # Install to ~/.cargo/bin
 
 ```bash
 pm add code-review
+pm add work/week-report
 pm list
 pm get code-review
 pm get code-review | codex exec -
@@ -44,7 +45,7 @@ Review the following code:
 {{input}}
 ```
 
-`name` must be unique; `description` and `tags` are optional. Changing `name` also renames the prompt.
+`name` must be unique; `description` and `tags` are optional. Changing `name` also renames the prompt. Use `/` between name segments to organize prompts into groups, such as `work/week-report`.
 
 ## Retrieval and Templates
 
@@ -94,6 +95,7 @@ Prompts can also reference other prompts:
 
 ```bash
 pm list
+pm list work/
 pm list --tag coding
 pm list --favorite
 pm list --sort updated
@@ -101,7 +103,7 @@ pm list --sort used
 pm search mongo
 ```
 
-`list` displays stable IDs accepted by `pm get --id ID`, prompt names, local update times to the minute, and relative last-use times in an aligned table. `--sort updated` sorts by update time, and `--sort used` sorts by most recent use.
+`list` displays stable IDs accepted by `pm get --id ID`, prompt names, local update times to the minute, and relative last-use times in an aligned table. Pass a group ending in `/`, such as `pm list work/`, to recursively list prompts in that group while keeping their full names. Nested groups are supported. `--sort updated` sorts by update time, and `--sort used` sorts by most recent use.
 
 Use favorites together with `list --favorite`:
 

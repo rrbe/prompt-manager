@@ -2,6 +2,7 @@ use crate::{
     cli::{ListArgs, ListSort},
     db::{Database, PromptListEntry},
     error::{Error, Result},
+    prompt::validate_group,
 };
 use std::time::Duration;
 
@@ -11,6 +12,9 @@ use timeago::{Formatter, TimeUnit};
 use super::{current_local_offset, format_local_timestamp, format_table, write_stdout};
 
 pub fn run(arguments: ListArgs, database: &Database) -> Result<()> {
+    if let Some(group) = arguments.group.as_deref() {
+        validate_group(group)?;
+    }
     let tag = match arguments.tag {
         Some(tag) => {
             let tag = tag.trim();
@@ -21,7 +25,11 @@ pub fn run(arguments: ListArgs, database: &Database) -> Result<()> {
         }
         None => None,
     };
-    let mut prompts = database.list_prompts_filtered(tag.as_deref(), arguments.favorite)?;
+    let mut prompts = database.list_prompts_filtered(
+        arguments.group.as_deref(),
+        tag.as_deref(),
+        arguments.favorite,
+    )?;
     sort(&mut prompts, arguments.sort);
     if prompts.is_empty() {
         return Ok(());

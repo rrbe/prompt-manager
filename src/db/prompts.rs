@@ -155,22 +155,24 @@ impl Database {
 
     pub fn list_prompts_filtered(
         &self,
+        group: Option<&str>,
         tag: Option<&str>,
         favorite_only: bool,
     ) -> Result<Vec<PromptListEntry>> {
         let mut statement = self.connection.prepare(
             "SELECT prompts.id, prompts.name, prompts.updated_at, prompts.last_used_at\n\
              FROM prompts\n\
-             WHERE (?1 IS NULL OR EXISTS (\n\
+             WHERE (?1 IS NULL OR substr(prompts.name, 1, length(?1)) = ?1)\n\
+             AND (?2 IS NULL OR EXISTS (\n\
                  SELECT 1\n\
                  FROM prompt_tags\n\
                  JOIN tags ON tags.id = prompt_tags.tag_id\n\
-                 WHERE prompt_tags.prompt_id = prompts.id AND tags.name = ?1\n\
+                 WHERE prompt_tags.prompt_id = prompts.id AND tags.name = ?2\n\
              ))\n\
-             AND (?2 = 0 OR prompts.favorite = 1)\n\
+             AND (?3 = 0 OR prompts.favorite = 1)\n\
              ORDER BY prompts.name",
         )?;
-        let rows = statement.query_map(params![tag, favorite_only], |row| {
+        let rows = statement.query_map(params![group, tag, favorite_only], |row| {
             Ok(PromptListEntry {
                 id: row.get(0)?,
                 name: row.get(1)?,
@@ -323,7 +325,7 @@ mod tests {
             .create_prompt(&input("beta", "b", &["writing"]))
             .unwrap();
         let prompts = database
-            .list_prompts_filtered(Some("coding"), false)
+            .list_prompts_filtered(None, Some("coding"), false)
             .unwrap();
         assert_eq!(
             prompts
@@ -360,7 +362,7 @@ mod tests {
         assert!(database.get_prompt("versioned").unwrap().favorite);
         assert_eq!(
             database
-                .list_prompts_filtered(None, true)
+                .list_prompts_filtered(None, None, true)
                 .unwrap()
                 .into_iter()
                 .map(|prompt| prompt.name)
