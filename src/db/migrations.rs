@@ -26,6 +26,11 @@ const MIGRATIONS: &[Migration] = &[
         name: "monotonic_prompt_ids",
         sql: include_str!("../../migrations/0003_monotonic_prompt_ids.sql"),
     },
+    Migration {
+        version: 4,
+        name: "prompt_exec",
+        sql: include_str!("../../migrations/0004_prompt_exec.sql"),
+    },
 ];
 
 impl Database {
@@ -76,7 +81,7 @@ mod tests {
                 row.get(0)
             })
             .unwrap();
-        assert_eq!(count, 3);
+        assert_eq!(count, 4);
     }
 
     #[test]
@@ -120,8 +125,10 @@ mod tests {
                 description: None,
                 content: "body".into(),
                 tags: Vec::new(),
+                exec: None,
             })
             .unwrap();
         assert_eq!(database.get_prompt("new").unwrap().id, 2);
+        assert_eq!(database.get_prompt("new").unwrap().exec, None);
     }
 }

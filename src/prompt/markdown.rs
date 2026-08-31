@@ -1,8 +1,8 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::{
     error::{Error, Result},
-    prompt::{normalize_tags, template, validate_name},
+    prompt::{normalize_tags, parse_exec_command, template, validate_name},
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -10,6 +10,7 @@ pub struct PromptDocument {
     pub name: String,
     pub description: Option<String>,
     pub tags: Vec<String>,
+    pub exec: Option<String>,
     pub content: String,
 }
 
@@ -21,6 +22,21 @@ struct Metadata {
     description: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     tags: Vec<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_optional_exec"
+    )]
+    exec: Option<String>,
+}
+
+fn deserialize_optional_exec<'de, D>(
+    deserializer: D,
+) -> std::result::Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    String::deserialize(deserializer).map(Some)
 }
 
 pub fn parse(source: &str) -> Result<PromptDocument> {
@@ -28,6 +44,9 @@ pub fn parse(source: &str) -> Result<PromptDocument> {
     let metadata: Metadata = serde_yaml::from_str(metadata_source)?;
     validate_name(&metadata.name)?;
     let tags = normalize_tags(metadata.tags)?;
+    if let Some(command) = &metadata.exec {
+        parse_exec_command(command)?;
+    }
     let body_start = source.len() - body.len();
     let body_line_offset = source[..body_start]
         .bytes()
@@ -39,16 +58,21 @@ pub fn parse(source: &str) -> Result<PromptDocument> {
         name: metadata.name,
         description: metadata.description,
         tags,
+        exec: metadata.exec,
         content: body.to_owned(),
     })
 }
 
 pub fn export(document: &PromptDocument) -> Result<String> {
     validate_name(&document.name)?;
+    if let Some(command) = &document.exec {
+        parse_exec_command(command)?;
+    }
     let metadata = Metadata {
         name: document.name.clone(),
         description: document.description.clone(),
         tags: normalize_tags(document.tags.clone())?,
+        exec: document.exec.clone(),
     };
     let yaml = serde_yaml::to_string(&metadata)?;
     Ok(format!("---\n{yaml}---\n\n{}", document.content))
@@ -106,11 +130,12 @@ mod tests {
     #[test]
     fn parses_front_matter_and_preserves_body() {
         let document = parse(
-            "---\nname: code-review\ndescription: Review source code\ntags:\n  - review\n  - coding\n---\n\nReview:\n\n{{input}}\n",
+            "---\nname: code-review\ndescription: Review source code\ntags:\n  - review\n  - coding\nexec: codex exec -\n---\n\nReview:\n\n{{input}}\n",
         )
         .unwrap();
         assert_eq!(document.name, "code-review");
         assert_eq!(document.tags, vec!["coding", "review"]);
+        assert_eq!(document.exec.as_deref(), Some("codex exec -"));
         assert_eq!(document.content, "Review:\n\n{{input}}\n");
     }
 
@@ -120,6 +145,7 @@ mod tests {
             name: "test".into(),
             description: None,
             tags: vec!["z".into(), "a".into()],
+            exec: Some("codex exec -".into()),
             content: "body without newline".into(),
         };
         let markdown = export(&document).unwrap();
@@ -141,6 +167,13 @@ mod tests {
     #[test]
     fn rejects_unknown_metadata() {
         assert!(parse("---\nname: test\nmodel: example\n---\n\nbody").is_err());
+    }
+
+    #[test]
+    fn rejects_invalid_exec_commands() {
+        assert!(parse("---\nname: test\nexec: '  '\n---\n\nbody").is_err());
+        assert!(parse("---\nname: test\nexec: \"codex '\"\n---\n\nbody").is_err());
+        assert!(parse("---\nname: test\nexec:\n---\n\nbody").is_err());
     }
 
     #[test]

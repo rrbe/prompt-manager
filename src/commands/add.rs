@@ -20,6 +20,7 @@ pub fn run(arguments: AddArgs, database: &mut Database) -> Result<()> {
         name: arguments.name,
         description: None,
         tags: Vec::new(),
+        exec: None,
         content: String::new(),
     })?;
     let document = editor::edit_until_valid(&initial, markdown::parse)?;

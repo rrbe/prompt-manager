@@ -5,7 +5,7 @@ use std::{
 };
 
 use crate::{
-    cli::GetArgs,
+    cli::{GetArgs, PromptArgs},
     db::Database,
     error::{Error, Result},
     prompt::{template, validate_name},
@@ -15,6 +15,18 @@ use crate::{
 use super::write_stdout;
 
 pub fn run(arguments: GetArgs, database: &mut Database) -> Result<()> {
+    let rendered = render(arguments.prompt, database)?;
+    database.mark_prompt_used(&rendered.name)?;
+    write_stdout(&rendered.content)
+}
+
+pub(super) struct RenderedPrompt {
+    pub name: String,
+    pub content: String,
+    pub exec: Option<String>,
+}
+
+pub(super) fn render(arguments: PromptArgs, database: &mut Database) -> Result<RenderedPrompt> {
     let name = if arguments.pick {
         pick(database)?
     } else if let Some(id) = arguments.id {
@@ -47,8 +59,11 @@ pub fn run(arguments: GetArgs, database: &mut Database) -> Result<()> {
     }
 
     let rendered = template::render(&content, &values)?;
-    database.mark_prompt_used(&prompt.name)?;
-    write_stdout(&rendered)
+    Ok(RenderedPrompt {
+        name: prompt.name,
+        content: rendered,
+        exec: prompt.exec,
+    })
 }
 
 fn pick(database: &Database) -> Result<String> {

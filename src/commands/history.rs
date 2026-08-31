@@ -61,6 +61,7 @@ fn document(version: PromptVersion) -> PromptDocument {
         name: version.name,
         description: version.description,
         tags: version.tags,
+        exec: version.exec,
         content: version.content,
     }
 }

@@ -56,6 +56,7 @@ mod tests {
                 description: description.map(Into::into),
                 content: content.into(),
                 tags: vec![],
+                exec: None,
             })
             .unwrap();
     }
@@ -84,6 +85,7 @@ mod tests {
                     description: Some("relational".into()),
                     content: "new token".into(),
                     tags: vec![],
+                    exec: None,
                 },
             )
             .unwrap();

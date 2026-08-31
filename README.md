@@ -9,6 +9,7 @@ pm add work/code-review                   # save prompt，/ is the optional grou
 pm list                                   # list saved prompts
 pm get code-review                        # print the prompt `code-review` to stdio
 pm get code-review | codex exec -
+pm exec code-review                       # run the prompt's configured command
 codex "$(pm get prompt-name)"
 pm edit code-review
 pm rm code-review
@@ -34,6 +35,7 @@ pm add work/week-report
 pm list
 pm get code-review
 pm get code-review | codex exec -
+pm exec code-review
 codex "$(pm get prompt-name)"
 pm edit code-review
 pm rm code-review
@@ -50,6 +52,7 @@ description: Review source code
 tags:
   - coding
   - review
+exec: codex exec -
 ---
 
 Review the following code:
@@ -57,7 +60,7 @@ Review the following code:
 {{input}}
 ```
 
-`name` must be unique; `description` and `tags` are optional. Changing `name` also renames the prompt. Use `/` between name segments to organize prompts into groups, such as `work/week-report`.
+`name` must be unique; `description`, `tags`, and `exec` are optional. Changing `name` also renames the prompt. Use `/` between name segments to organize prompts into groups, such as `work/week-report`.
 
 ## Retrieval and Templates
 
@@ -109,6 +112,38 @@ Prompts can also reference other prompts:
 ```
 
 `get` expands references before substituting variables. The command fails when a reference is missing, references form a cycle, or a variable has no value. Variable names must match `[a-zA-Z_][a-zA-Z0-9_-]*`; whitespace immediately inside `{{` and `}}` is allowed. Invalid template expressions are rejected when prompts are added, edited, or imported.
+
+## Execution
+
+Set `exec` in a prompt's front matter to run the rendered prompt without rebuilding the command line each time:
+
+```markdown
+---
+name: code-review
+exec: codex exec -
+---
+
+Review the following code:
+
+{{input}}
+```
+
+`pm exec` supports the same selectors and template options as `pm get`. The rendered prompt is written to the configured command's stdin:
+
+```bash
+pm exec code-review
+pm exec --id 1
+pm exec --pick
+some-command | pm exec code-review -v language=rust
+```
+
+Arguments after `--` are appended to the configured command:
+
+```bash
+pm exec code-review -- --model gpt-5.4
+```
+
+The command is split into an executable and arguments using shell-style quoting and is launched directly. It inherits `pm`'s working directory, environment, stdout, and stderr. `pm exec` returns the command's exit code.
 
 ## Listing and Search
 

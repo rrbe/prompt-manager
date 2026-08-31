@@ -118,6 +118,128 @@ fn missing_variables_fail_without_stdout() {
         .stderr(predicate::str::contains("missing variable: language"));
 }
 
+#[cfg(unix)]
+#[test]
+fn exec_renders_stdin_and_variables_and_appends_arguments() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let directory = TempDir::new().unwrap();
+    let executable = directory.path().join("capture-exec.sh");
+    fs::write(
+        &executable,
+        "#!/bin/sh\nfor argument in \"$@\"; do printf 'arg=<%s>\\n' \"$argument\"; done\nprintf 'prompt:\\n'\ncat\n",
+    )
+    .unwrap();
+    fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
+    import_prompt(
+        directory.path(),
+        "executable.md",
+        &format!(
+            "---\nname: executable\nexec: {} \"configured value\" '$HOME'\n---\n\nLanguage: {{{{language}}}}\n\n{{{{input}}}}",
+            executable.display()
+        ),
+    );
+
+    pm(directory.path())
+        .args([
+            "exec",
+            "executable",
+            "-v",
+            "language=rust",
+            "--",
+            "--model",
+            "gpt-5.4",
+        ])
+        .write_stdin("source\n")
+        .assert()
+        .success()
+        .stdout(
+            "arg=<configured value>\narg=<$HOME>\narg=<--model>\narg=<gpt-5.4>\nprompt:\nLanguage: rust\n\nsource\n",
+        )
+        .stderr("");
+
+    pm(directory.path())
+        .args(["list", "--sort", "used"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("now"))
+        .stderr("");
+}
+
+#[cfg(unix)]
+#[test]
+fn exec_supports_id_and_propagates_the_command_exit_code() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let directory = TempDir::new().unwrap();
+    let executable = directory.path().join("failing-exec.sh");
+    fs::write(&executable, "#!/bin/sh\ncat >/dev/null\nexit 7\n").unwrap();
+    fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
+    import_prompt(
+        directory.path(),
+        "failing.md",
+        &format!(
+            "---\nname: failing\nexec: {}\n---\n\nprompt body",
+            executable.display()
+        ),
+    );
+
+    pm(directory.path())
+        .args(["exec", "--id", "1"])
+        .assert()
+        .failure()
+        .code(7)
+        .stdout("")
+        .stderr("");
+
+    pm(directory.path())
+        .args(["list", "--sort", "used"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("now"))
+        .stderr("");
+}
+
+#[test]
+fn exec_requires_a_configured_command_and_reports_start_failures() {
+    let directory = TempDir::new().unwrap();
+    import_prompt(
+        directory.path(),
+        "plain-exec.md",
+        "---\nname: plain-exec\n---\n\nbody",
+    );
+    import_prompt(
+        directory.path(),
+        "missing-program.md",
+        "---\nname: missing-program\nexec: pm-program-that-does-not-exist\n---\n\nbody",
+    );
+
+    pm(directory.path())
+        .args(["exec", "plain-exec"])
+        .assert()
+        .failure()
+        .code(1)
+        .stdout("")
+        .stderr(predicate::str::contains(
+            "prompt has no exec command: plain-exec",
+        ));
+    pm(directory.path())
+        .args(["exec", "missing-program"])
+        .assert()
+        .failure()
+        .code(1)
+        .stdout("")
+        .stderr(predicate::str::contains(
+            "failed to start exec command `pm-program-that-does-not-exist`",
+        ));
+    pm(directory.path())
+        .arg("list")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("now").not())
+        .stderr("");
+}
+
 #[test]
 fn interactive_get_prompts_for_missing_variables_and_keeps_stdout_clean() {
     let directory = TempDir::new().unwrap();
@@ -223,9 +345,9 @@ fn removed_file_option_is_rejected_and_duplicate_variables_fail() {
 }
 
 #[test]
-fn export_remove_import_round_trip_preserves_content_and_tags() {
+fn export_remove_import_round_trip_preserves_content_tags_and_exec() {
     let directory = TempDir::new().unwrap();
-    let original = "---\nname: round-trip\ndescription: A test\ntags:\n  - zeta\n  - alpha\n---\n\nBody\n\n{{input}}";
+    let original = "---\nname: round-trip\ndescription: A test\ntags:\n  - zeta\n  - alpha\nexec: codex exec -\n---\n\nBody\n\n{{input}}";
     import_prompt(directory.path(), "original.md", original);
 
     let exported = pm(directory.path())
@@ -276,6 +398,49 @@ fn import_rejects_invalid_template_syntax() {
         .stderr(predicate::str::contains(
             "invalid template syntax at line 5, column 1: invalid expression `{{ daily report content }}`",
         ));
+}
+
+#[test]
+fn import_rejects_invalid_exec_commands() {
+    let directory = TempDir::new().unwrap();
+    let empty = write_prompt(
+        directory.path(),
+        "empty-exec.md",
+        "---\nname: empty-exec\nexec: '  '\n---\n\nbody",
+    );
+    pm(directory.path())
+        .args(["import", empty.to_str().unwrap()])
+        .assert()
+        .failure()
+        .code(1)
+        .stdout("")
+        .stderr(predicate::str::contains("exec command must not be empty"));
+
+    let null = write_prompt(
+        directory.path(),
+        "null-exec.md",
+        "---\nname: null-exec\nexec:\n---\n\nbody",
+    );
+    pm(directory.path())
+        .args(["import", null.to_str().unwrap()])
+        .assert()
+        .failure()
+        .code(1)
+        .stdout("")
+        .stderr(predicate::str::contains("exec command must not be empty"));
+
+    let invalid = write_prompt(
+        directory.path(),
+        "invalid-exec.md",
+        "---\nname: invalid-exec\nexec: \"codex '\"\n---\n\nbody",
+    );
+    pm(directory.path())
+        .args(["import", invalid.to_str().unwrap()])
+        .assert()
+        .failure()
+        .code(1)
+        .stdout("")
+        .stderr(predicate::str::contains("invalid exec command"));
 }
 
 #[test]
@@ -486,7 +651,7 @@ fn history_and_diff_include_atomic_edit_versions() {
     let editor = directory.path().join("history-editor.sh");
     fs::write(
         &editor,
-        "#!/bin/sh\nprintf '%s' '---\nname: versioned\ntags:\n  - second\n---\n\nversion two' > \"$1\"\n",
+        "#!/bin/sh\nprintf '%s' '---\nname: versioned\ntags:\n  - second\nexec: codex exec -\n---\n\nversion two' > \"$1\"\n",
     )
     .unwrap();
     fs::set_permissions(&editor, fs::Permissions::from_mode(0o700)).unwrap();
@@ -515,6 +680,7 @@ fn history_and_diff_include_atomic_edit_versions() {
         .stdout(predicate::str::contains("+++ versioned@2"))
         .stdout(predicate::str::contains("-version one"))
         .stdout(predicate::str::contains("+version two"))
+        .stdout(predicate::str::contains("+exec: codex exec -"))
         .stderr("");
 }
 
@@ -584,6 +750,15 @@ fn dynamic_completion_reads_prompt_names_from_the_database() {
         .stdout(predicate::str::contains("dynamic-name"))
         .stderr("");
     pm(directory.path())
+        .env("COMPLETE", "zsh")
+        .env("_CLAP_COMPLETE_INDEX", "2")
+        .env("_CLAP_IFS", "\n")
+        .args(["--", "pm", "exec", "dynamic"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("dynamic-name"))
+        .stderr("");
+    pm(directory.path())
         .args(["completions", "zsh", "--dynamic"])
         .assert()
         .success()
@@ -602,6 +777,21 @@ fn get_help_shows_codex_usage_examples() {
             predicate::str::contains("codex \"$(pm get prompt-name)\"").and(
                 predicate::str::contains("pm get prompt-name | codex exec -"),
             ),
+        )
+        .stderr("");
+}
+
+#[test]
+fn exec_help_shows_configured_command_and_appended_argument_examples() {
+    let directory = TempDir::new().unwrap();
+    pm(directory.path())
+        .args(["exec", "--help"])
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("pm exec prompt-name").and(predicate::str::contains(
+                "pm exec prompt-name -- --model gpt-5.4",
+            )),
         )
         .stderr("");
 }

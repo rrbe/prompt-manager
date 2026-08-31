@@ -18,6 +18,7 @@ pub struct PromptVersion {
     pub description: Option<String>,
     pub content: String,
     pub tags: Vec<String>,
+    pub exec: Option<String>,
     pub created_at: i64,
 }
 
@@ -46,7 +47,7 @@ impl Database {
         let row = self
             .connection
             .query_row(
-                "SELECT id, version, name, description, content, created_at\n\
+                "SELECT id, version, name, description, content, exec, created_at\n\
                  FROM prompt_versions\n\
                  WHERE prompt_id = ?1 AND version = ?2",
                 params![prompt_id, version],
@@ -57,13 +58,14 @@ impl Database {
                         row.get::<_, String>(2)?,
                         row.get::<_, Option<String>>(3)?,
                         row.get::<_, String>(4)?,
-                        row.get::<_, i64>(5)?,
+                        row.get::<_, Option<String>>(5)?,
+                        row.get::<_, i64>(6)?,
                     ))
                 },
             )
             .optional()?
             .ok_or_else(|| Error::Message(format!("prompt version not found: {name}@{version}")))?;
-        let (id, version, name, description, content, created_at) = row;
+        let (id, version, name, description, content, exec, created_at) = row;
         let mut statement = self.connection.prepare(
             "SELECT tag FROM prompt_version_tags\n\
              WHERE prompt_version_id = ?1 ORDER BY tag",
@@ -78,6 +80,7 @@ impl Database {
             description,
             content,
             tags,
+            exec,
             created_at,
         })
     }
@@ -97,14 +100,15 @@ pub(super) fn record_version(
     )?;
     transaction.execute(
         "INSERT INTO prompt_versions(\n\
-            prompt_id, version, name, description, content, created_at\n\
-         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            prompt_id, version, name, description, content, exec, created_at\n\
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
         params![
             prompt_id,
             version,
             input.name,
             input.description,
             input.content,
+            input.exec,
             created_at
         ],
     )?;

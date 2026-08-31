@@ -1,4 +1,8 @@
-use std::{ffi::OsStr, path::PathBuf, str::FromStr};
+use std::{
+    ffi::{OsStr, OsString},
+    path::PathBuf,
+    str::FromStr,
+};
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use clap_complete::engine::{ArgValueCompleter, CompletionCandidate};
@@ -25,6 +29,11 @@ pub enum Command {
         after_long_help = "Examples:\n  # Start an interactive Codex session with a stored prompt\n  codex \"$(pm get prompt-name)\"\n\n  # Run a stored prompt non-interactively with Codex Exec\n  pm get prompt-name | codex exec -"
     )]
     Get(GetArgs),
+    /// Execute a prompt using its configured command.
+    #[command(
+        after_long_help = "Examples:\n  # Execute the configured command\n  pm exec prompt-name\n\n  # Append arguments to the configured command\n  pm exec prompt-name -- --model gpt-5.4"
+    )]
+    Exec(ExecArgs),
     /// List prompts with edit and usage times.
     List(ListArgs),
     /// Search prompt names, descriptions, and bodies.
@@ -70,6 +79,22 @@ pub struct RemoveArgs {
 
 #[derive(Debug, Args)]
 pub struct GetArgs {
+    #[command(flatten)]
+    pub prompt: PromptArgs,
+}
+
+#[derive(Debug, Args)]
+pub struct ExecArgs {
+    #[command(flatten)]
+    pub prompt: PromptArgs,
+
+    /// Append arguments to the configured command.
+    #[arg(last = true, value_name = "ARG")]
+    pub arguments: Vec<OsString>,
+}
+
+#[derive(Debug, Args)]
+pub struct PromptArgs {
     /// Prompt name; required unless --id or --pick is used.
     #[arg(add = ArgValueCompleter::new(prompt_name_completer))]
     #[arg(

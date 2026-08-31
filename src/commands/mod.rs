@@ -1,6 +1,7 @@
 mod add;
 mod completions;
 mod edit;
+mod exec;
 mod export;
 mod favorite;
 mod get;
@@ -40,6 +41,7 @@ pub fn execute(command: Command, database: &mut Database) -> Result<()> {
         Command::Edit(arguments) => edit::run(arguments, database),
         Command::Rm(arguments) => remove::run(arguments, database),
         Command::Get(arguments) => get::run(arguments, database),
+        Command::Exec(arguments) => exec::run(arguments, database),
         Command::List(arguments) => list::run(arguments, database),
         Command::Search(arguments) => search::run(arguments, database),
         Command::Import(arguments) => import::run(arguments, database),
@@ -186,6 +188,7 @@ fn document_to_input(document: PromptDocument) -> PromptInput {
         description: document.description,
         content: document.content,
         tags: document.tags,
+        exec: document.exec,
     }
 }
 
@@ -194,6 +197,7 @@ fn prompt_to_document(prompt: Prompt) -> PromptDocument {
         name: prompt.name,
         description: prompt.description,
         tags: prompt.tags,
+        exec: prompt.exec,
         content: prompt.content,
     }
 }

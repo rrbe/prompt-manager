@@ -11,6 +11,7 @@ pub struct Prompt {
     pub description: Option<String>,
     pub content: String,
     pub tags: Vec<String>,
+    pub exec: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
     pub last_used_at: Option<i64>,
@@ -24,6 +25,7 @@ pub struct PromptInput {
     pub description: Option<String>,
     pub content: String,
     pub tags: Vec<String>,
+    pub exec: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -50,9 +52,16 @@ impl Database {
         let id = transaction.last_insert_rowid();
         transaction.execute("DELETE FROM prompt_id_sequence WHERE id = ?1", [id])?;
         transaction.execute(
-            "INSERT INTO prompts(id, name, description, content, created_at, updated_at)\n\
-             VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
-            params![id, input.name, input.description, input.content, now],
+            "INSERT INTO prompts(id, name, description, content, exec, created_at, updated_at)\n\
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)",
+            params![
+                id,
+                input.name,
+                input.description,
+                input.content,
+                input.exec,
+                now
+            ],
         )?;
         tags::replace(&transaction, id, &input.tags)?;
         history::record_version(&transaction, id, input, now)?;
@@ -95,6 +104,7 @@ impl Database {
             && current.description == input.description
             && current.content == input.content
             && current.tags == input.tags
+            && current.exec == input.exec
         {
             transaction.commit()?;
             return Ok(());
@@ -103,9 +113,16 @@ impl Database {
         let now = now_timestamp();
         transaction.execute(
             "UPDATE prompts\n\
-             SET name = ?1, description = ?2, content = ?3, updated_at = ?4\n\
-             WHERE id = ?5",
-            params![input.name, input.description, input.content, now, id],
+             SET name = ?1, description = ?2, content = ?3, exec = ?4, updated_at = ?5\n\
+             WHERE id = ?6",
+            params![
+                input.name,
+                input.description,
+                input.content,
+                input.exec,
+                now,
+                id
+            ],
         )?;
         tags::replace(&transaction, id, &input.tags)?;
         history::record_version(&transaction, id, input, now)?;
@@ -197,7 +214,7 @@ fn prompt_id(connection: &Connection, name: &str) -> Result<Option<i64>> {
 fn query_prompt(transaction: &Transaction<'_>, name: &str) -> Result<Option<Prompt>> {
     let row = transaction
         .query_row(
-            "SELECT id, name, description, content, created_at, updated_at, last_used_at, use_count, favorite\n\
+            "SELECT id, name, description, content, exec, created_at, updated_at, last_used_at, use_count, favorite\n\
              FROM prompts WHERE name = ?1",
             [name],
             |row| {
@@ -206,11 +223,12 @@ fn query_prompt(transaction: &Transaction<'_>, name: &str) -> Result<Option<Prom
                     row.get::<_, String>(1)?,
                     row.get::<_, Option<String>>(2)?,
                     row.get::<_, String>(3)?,
-                    row.get::<_, i64>(4)?,
+                    row.get::<_, Option<String>>(4)?,
                     row.get::<_, i64>(5)?,
-                    row.get::<_, Option<i64>>(6)?,
-                    row.get::<_, i64>(7)?,
-                    row.get::<_, bool>(8)?,
+                    row.get::<_, i64>(6)?,
+                    row.get::<_, Option<i64>>(7)?,
+                    row.get::<_, i64>(8)?,
+                    row.get::<_, bool>(9)?,
                 ))
             },
         )
@@ -221,6 +239,7 @@ fn query_prompt(transaction: &Transaction<'_>, name: &str) -> Result<Option<Prom
         name,
         description,
         content,
+        exec,
         created_at,
         updated_at,
         last_used_at,
@@ -236,6 +255,7 @@ fn query_prompt(transaction: &Transaction<'_>, name: &str) -> Result<Option<Prom
         description,
         content,
         tags: tags::get(transaction, id)?,
+        exec,
         created_at,
         updated_at,
         last_used_at,
@@ -254,6 +274,7 @@ mod tests {
             description: None,
             content: content.into(),
             tags: tags.iter().map(|tag| (*tag).into()).collect(),
+            exec: None,
         }
     }
 

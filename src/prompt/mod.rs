@@ -5,6 +5,15 @@ use std::collections::BTreeSet;
 
 use crate::error::{Error, Result};
 
+pub fn parse_exec_command(command: &str) -> Result<Vec<String>> {
+    let arguments = shell_words::split(command)
+        .map_err(|error| Error::Message(format!("invalid exec command: {error}")))?;
+    if arguments.is_empty() {
+        return Err(Error::Message("exec command must not be empty".into()));
+    }
+    Ok(arguments)
+}
+
 pub fn validate_name(name: &str) -> Result<()> {
     if name.is_empty() {
         return Err(Error::Message("prompt name must not be empty".into()));
@@ -93,5 +102,15 @@ mod tests {
             normalize_tags(vec![" review ".into(), "coding".into(), "review".into()]).unwrap(),
             vec!["coding", "review"]
         );
+    }
+
+    #[test]
+    fn parses_exec_commands_without_a_shell() {
+        assert_eq!(
+            parse_exec_command("codex exec --model 'gpt 5' -").unwrap(),
+            ["codex", "exec", "--model", "gpt 5", "-"]
+        );
+        assert!(parse_exec_command("  ").is_err());
+        assert!(parse_exec_command("codex '").is_err());
     }
 }

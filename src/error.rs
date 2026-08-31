@@ -27,6 +27,9 @@ pub enum Error {
     #[error("editor exited with status {0}")]
     EditorFailed(std::process::ExitStatus),
 
+    #[error("exec command exited with status {0}")]
+    ExecFailed(std::process::ExitStatus),
+
     #[error("database error: {0}")]
     Database(#[from] rusqlite::Error),
 
@@ -40,6 +43,13 @@ pub enum Error {
 impl Error {
     pub fn is_broken_pipe(&self) -> bool {
         matches!(self, Self::Io(error) if error.kind() == io::ErrorKind::BrokenPipe)
+    }
+
+    pub fn exec_exit_code(&self) -> Option<i32> {
+        match self {
+            Self::ExecFailed(status) => status.code(),
+            _ => None,
+        }
     }
 }
 
