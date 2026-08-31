@@ -207,6 +207,26 @@ fn export_remove_import_round_trip_preserves_content_and_tags() {
 }
 
 #[test]
+fn import_rejects_invalid_template_syntax() {
+    let directory = TempDir::new().unwrap();
+    let path = write_prompt(
+        directory.path(),
+        "invalid-template.md",
+        "---\nname: invalid-template\n---\n\n{{ daily report content }}",
+    );
+
+    pm(directory.path())
+        .args(["import", path.to_str().unwrap()])
+        .assert()
+        .failure()
+        .code(1)
+        .stdout("")
+        .stderr(predicate::str::contains(
+            "invalid template syntax at line 5, column 1: invalid expression `{{ daily report content }}`",
+        ));
+}
+
+#[test]
 fn list_renders_a_table_and_search_has_a_stable_line_format() {
     let directory = TempDir::new().unwrap();
     import_prompt(
@@ -714,6 +734,22 @@ fn add_and_edit_use_an_external_editor_and_protect_original_on_failure() {
         .success()
         .stdout("first body");
 
+    fs::write(
+        &editor,
+        "#!/bin/sh\nprintf '%s' '---\nname: invalid-template\n---\n\n{{ daily report content }}' > \"$1\"\n",
+    )
+    .unwrap();
+    pm(directory.path())
+        .env("VISUAL", &editor)
+        .args(["add", "invalid-template"])
+        .assert()
+        .failure()
+        .code(1)
+        .stdout("")
+        .stderr(predicate::str::contains(
+            "invalid template syntax at line 5, column 1: invalid expression `{{ daily report content }}`",
+        ));
+
     fs::write(&editor, "#!/bin/sh\nexit 7\n").unwrap();
     pm(directory.path())
         .env("VISUAL", &editor)
@@ -723,6 +759,27 @@ fn add_and_edit_use_an_external_editor_and_protect_original_on_failure() {
         .code(1)
         .stdout("")
         .stderr(predicate::str::contains("editor exited with status"));
+    pm(directory.path())
+        .args(["get", "created"])
+        .assert()
+        .success()
+        .stdout("first body");
+
+    fs::write(
+        &editor,
+        "#!/bin/sh\nprintf '%s' '---\nname: created\n---\n\n{{ daily report content }}' > \"$1\"\n",
+    )
+    .unwrap();
+    pm(directory.path())
+        .env("VISUAL", &editor)
+        .args(["edit", "created"])
+        .assert()
+        .failure()
+        .code(1)
+        .stdout("")
+        .stderr(predicate::str::contains(
+            "invalid template syntax at line 5, column 1: invalid expression `{{ daily report content }}`",
+        ));
     pm(directory.path())
         .args(["get", "created"])
         .assert()

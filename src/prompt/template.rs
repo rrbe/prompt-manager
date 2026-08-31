@@ -27,6 +27,46 @@ pub fn is_valid_variable_name(name: &str) -> bool {
     bytes.all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
 }
 
+pub fn validate(template: &str) -> Result<()> {
+    validate_with_line_offset(template, 0)
+}
+
+pub(crate) fn validate_with_line_offset(template: &str, line_offset: usize) -> Result<()> {
+    let mut cursor = 0;
+
+    loop {
+        let opening = template[cursor..]
+            .find("{{")
+            .map(|position| cursor + position);
+
+        let Some(opening) = opening else {
+            return Ok(());
+        };
+        let value_start = opening + 2;
+        let Some(relative_closing) = template[value_start..].find("}}") else {
+            return Err(syntax_error(
+                template,
+                opening,
+                line_offset,
+                "unclosed `{{`",
+            ));
+        };
+        let closing = value_start + relative_closing;
+        let candidate = template[value_start..closing].trim();
+
+        if !is_valid_variable_name(candidate) && composition_name(candidate).is_none() {
+            return Err(syntax_error(
+                template,
+                opening,
+                line_offset,
+                &format!("invalid expression `{}`", &template[opening..closing + 2]),
+            ));
+        }
+
+        cursor = closing + 2;
+    }
+}
+
 pub fn placeholders(template: &str) -> Vec<Placeholder> {
     let bytes = template.as_bytes();
     let mut result = Vec::new();
@@ -39,7 +79,7 @@ pub fn placeholders(template: &str) -> Vec<Placeholder> {
             break;
         };
         let close = value_start + relative_close;
-        let candidate = &template[value_start..close];
+        let candidate = template[value_start..close].trim();
 
         if is_valid_variable_name(candidate) {
             result.push(Placeholder {
@@ -68,11 +108,9 @@ pub fn compositions(template: &str) -> Vec<Composition> {
             break;
         };
         let close = value_start + relative_close;
-        let candidate = &template[value_start..close];
+        let candidate = template[value_start..close].trim();
 
-        if let Some(name) = candidate.strip_prefix("prompt:")
-            && super::validate_name(name).is_ok()
-        {
+        if let Some(name) = composition_name(candidate) {
             result.push(Composition {
                 start: open,
                 end: close + 2,
@@ -88,6 +126,7 @@ pub fn compositions(template: &str) -> Vec<Composition> {
 }
 
 pub fn render(template: &str, values: &HashMap<String, String>) -> Result<String> {
+    validate(template)?;
     let placeholders = placeholders(template);
     for placeholder in &placeholders {
         if !values.contains_key(&placeholder.name) {
@@ -111,6 +150,26 @@ pub fn render(template: &str, values: &HashMap<String, String>) -> Result<String
     Ok(output)
 }
 
+fn composition_name(candidate: &str) -> Option<&str> {
+    candidate
+        .strip_prefix("prompt:")
+        .filter(|name| super::validate_name(name).is_ok())
+}
+
+fn syntax_error(template: &str, position: usize, line_offset: usize, message: &str) -> Error {
+    let prefix = &template[..position];
+    let line = line_offset + prefix.bytes().filter(|byte| *byte == b'\n').count() + 1;
+    let column = prefix
+        .rsplit_once('\n')
+        .map_or(prefix, |(_, line)| line)
+        .chars()
+        .count()
+        + 1;
+    Error::Message(format!(
+        "invalid template syntax at line {line}, column {column}: {message}"
+    ))
+}
+
 fn find_pair(bytes: &[u8], first: u8, second: u8) -> Option<usize> {
     bytes
         .windows(2)
@@ -130,7 +189,7 @@ mod tests {
 
     #[test]
     fn detects_and_renders_variables() {
-        let template = "Language: {{language}}\n\n{{input}}";
+        let template = "Language: {{ language }}\n\n{{input}}";
         assert_eq!(
             render(
                 template,
@@ -148,9 +207,34 @@ mod tests {
     }
 
     #[test]
-    fn leaves_non_template_braces_unchanged() {
-        let template = "{{ invalid }} and {value} and {{1bad}}";
-        assert_eq!(render(template, &HashMap::new()).unwrap(), template);
+    fn rejects_invalid_template_expressions() {
+        for template in [
+            "{{ daily report content }}",
+            "{{1bad}}",
+            "{{prompt:invalid name}}",
+            "{{value",
+        ] {
+            assert!(validate(template).is_err(), "{template} should be invalid");
+        }
+        assert_eq!(
+            validate("line one\n{{ invalid name }}")
+                .unwrap_err()
+                .to_string(),
+            "invalid template syntax at line 2, column 1: invalid expression `{{ invalid name }}`"
+        );
+    }
+
+    #[test]
+    fn allows_whitespace_around_expression_names() {
+        validate("{{ daily_report_content }} {{ prompt:shared.rules }}").unwrap();
+        assert_eq!(
+            render(
+                "Report: {{ daily_report_content }}",
+                &values(&[("daily_report_content", "done")])
+            )
+            .unwrap(),
+            "Report: done"
+        );
     }
 
     #[test]
@@ -162,21 +246,18 @@ mod tests {
     }
 
     #[test]
-    fn finds_valid_nested_opening_after_invalid_candidate() {
-        let template = "{{ invalid {{value}}";
-        assert_eq!(
-            render(template, &values(&[("value", "ok")])).unwrap(),
-            "{{ invalid ok"
-        );
+    fn leaves_single_braces_unchanged() {
+        let template = "{value} and JSON: {\"outer\": {\"key\": true}}";
+        assert_eq!(render(template, &HashMap::new()).unwrap(), template);
     }
 
     #[test]
     fn detects_prompt_composition_references_separately() {
         assert_eq!(
-            compositions("before {{prompt:shared.rules}} after"),
+            compositions("before {{ prompt:shared.rules }} after"),
             vec![Composition {
                 start: 7,
-                end: 30,
+                end: 32,
                 name: "shared.rules".into(),
             }]
         );

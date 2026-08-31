@@ -101,7 +101,7 @@ Prompts can also reference other prompts:
 {{input}}
 ```
 
-`get` expands references before substituting variables. The command fails when a reference is missing, references form a cycle, or a variable has no value.
+`get` expands references before substituting variables. The command fails when a reference is missing, references form a cycle, or a variable has no value. Variable names must match `[a-zA-Z_][a-zA-Z0-9_-]*`; whitespace immediately inside `{{` and `}}` is allowed. Invalid template expressions are rejected when prompts are added, edited, or imported.
 
 ## Listing and Search
 

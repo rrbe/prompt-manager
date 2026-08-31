@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     error::{Error, Result},
-    prompt::{normalize_tags, validate_name},
+    prompt::{normalize_tags, template, validate_name},
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -28,6 +28,12 @@ pub fn parse(source: &str) -> Result<PromptDocument> {
     let metadata: Metadata = serde_yaml::from_str(metadata_source)?;
     validate_name(&metadata.name)?;
     let tags = normalize_tags(metadata.tags)?;
+    let body_start = source.len() - body.len();
+    let body_line_offset = source[..body_start]
+        .bytes()
+        .filter(|byte| *byte == b'\n')
+        .count();
+    template::validate_with_line_offset(body, body_line_offset)?;
 
     Ok(PromptDocument {
         name: metadata.name,
@@ -141,5 +147,14 @@ mod tests {
     fn accepts_crlf_front_matter() {
         let document = parse("---\r\nname: test\r\n---\r\n\r\nbody\r\n").unwrap();
         assert_eq!(document.content, "body\r\n");
+    }
+
+    #[test]
+    fn reports_template_errors_at_the_markdown_file_line() {
+        let error = parse("---\nname: test\n---\n\nbody\n{{ invalid name }}").unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "invalid template syntax at line 6, column 1: invalid expression `{{ invalid name }}`"
+        );
     }
 }
