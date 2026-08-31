@@ -89,6 +89,10 @@ pub struct GetArgs {
     /// Set a variable as KEY=VALUE.
     #[arg(short = 'v', long = "var", value_name = "KEY=VALUE")]
     pub variables: Vec<VariableAssignment>,
+
+    /// Prompt for each missing variable using a multiline terminal form.
+    #[arg(short, long)]
+    pub interactive: bool,
 }
 
 #[derive(Debug, Args)]

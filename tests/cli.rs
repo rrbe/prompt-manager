@@ -119,6 +119,58 @@ fn missing_variables_fail_without_stdout() {
 }
 
 #[test]
+fn interactive_get_prompts_for_missing_variables_and_keeps_stdout_clean() {
+    let directory = TempDir::new().unwrap();
+    import_prompt(
+        directory.path(),
+        "interactive-shared.md",
+        "---\nname: interactive-shared\n---\n\nShared {{ details }}",
+    );
+    import_prompt(
+        directory.path(),
+        "interactive.md",
+        "---\nname: interactive\n---\n\n{{ provided }}\n{{ prompt:interactive-shared }}\n{{ provided }}",
+    );
+
+    pm(directory.path())
+        .args([
+            "get",
+            "interactive",
+            "--interactive",
+            "-v",
+            "provided=fixed",
+        ])
+        .write_stdin("\nfirst line\nsecond line\n\nEOF\n")
+        .assert()
+        .success()
+        .stdout("fixed\nShared first line\nsecond line\nfixed")
+        .stderr(
+            "[1/1] details\nEnter or paste the value. Finish with a line containing only `EOF`.\n",
+        );
+}
+
+#[test]
+fn interactive_get_fails_without_a_completed_value() {
+    let directory = TempDir::new().unwrap();
+    import_prompt(
+        directory.path(),
+        "interactive-incomplete.md",
+        "---\nname: interactive-incomplete\n---\n\n{{details}}",
+    );
+
+    pm(directory.path())
+        .args(["get", "interactive-incomplete", "--interactive"])
+        .write_stdin("unfinished\n")
+        .assert()
+        .failure()
+        .code(1)
+        .stdout("")
+        .stderr(predicate::str::contains(
+            "interactive input ended before completing variable: details",
+        ));
+}
+
+#[test]
 fn non_tty_input_fulfills_input_even_when_empty() {
     let directory = TempDir::new().unwrap();
     import_prompt(
