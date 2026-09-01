@@ -1056,6 +1056,36 @@ fn missing_prompt_and_unforced_non_tty_remove_fail_cleanly() {
         .stderr("");
 }
 
+#[test]
+fn remove_alias_is_visible_and_removes_a_prompt() {
+    let directory = TempDir::new().unwrap();
+    import_prompt(
+        directory.path(),
+        "remove-alias.md",
+        "---\nname: remove-alias\n---\n\nbody",
+    );
+
+    pm(directory.path())
+        .arg("--help")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("alias: remove"))
+        .stderr("");
+    pm(directory.path())
+        .args(["remove", "remove-alias", "--force"])
+        .assert()
+        .success()
+        .stdout("")
+        .stderr("");
+    pm(directory.path())
+        .args(["get", "remove-alias"])
+        .assert()
+        .failure()
+        .code(1)
+        .stdout("")
+        .stderr(predicate::str::contains("prompt not found: remove-alias"));
+}
+
 #[cfg(unix)]
 #[test]
 fn add_rejects_an_existing_name_before_opening_the_editor() {

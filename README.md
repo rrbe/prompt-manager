@@ -44,7 +44,7 @@ pm edit code-review
 pm rm code-review
 ```
 
-`add` uses piped or redirected stdin as the initial prompt body before opening the editor. Pass `--no-edit` to validate and save directly instead. `add` and `edit` select an editor in this order: `$VISUAL`, `$EDITOR`, then `vi`. `rm` asks for terminal confirmation by default; use `--force` to skip it.
+`add` uses piped or redirected stdin as the initial prompt body before opening the editor. Pass `--no-edit` to validate and save directly instead. `add` and `edit` select an editor in this order: `$VISUAL`, `$EDITOR`, then `vi`. `remove` is an alias for `rm`; both ask for terminal confirmation by default, and `--force` skips it.
 
 Prompts use Markdown with YAML front matter:
 

@@ -26,6 +26,7 @@ pub enum Command {
     /// Edit an existing prompt using an external editor.
     Edit(NameArgs),
     /// Remove a prompt.
+    #[command(visible_alias = "remove")]
     Rm(RemoveArgs),
     /// Get a prompt with variables and piped input.
     #[command(
