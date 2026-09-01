@@ -1306,6 +1306,8 @@ dependencies = [
 name = "prompt-manager"
 version = "0.5.0"
 dependencies = [
+ "anstream",
+ "anstyle",
  "assert_cmd",
  "clap",
  "clap_complete",

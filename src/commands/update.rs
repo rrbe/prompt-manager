@@ -1,4 +1,4 @@
-use std::io::{self, Write};
+use std::io::Write;
 
 use self_update::backends::github;
 
@@ -12,8 +12,8 @@ const REPO_OWNER: &str = "rrbe";
 const REPO_NAME: &str = "prompt-manager";
 
 pub fn run(arguments: UpdateArgs) -> Result<()> {
-    let stderr = io::stderr();
-    run_with(arguments, &GitHubUpdater, &mut stderr.lock())
+    let stderr = anstream::stderr();
+    run_with(arguments, &GitHubUpdater, &mut stderr.lock(), true)
 }
 
 trait Updater {
@@ -86,24 +86,41 @@ fn update_error(action: &str, error: self_update::Error) -> Error {
     Error::Message(format!("failed to {action}: {error}"))
 }
 
-fn run_with(arguments: UpdateArgs, updater: &impl Updater, output: &mut impl Write) -> Result<()> {
+fn run_with(
+    arguments: UpdateArgs,
+    updater: &impl Updater,
+    output: &mut impl Write,
+    colors_enabled: bool,
+) -> Result<()> {
     let Some(version) = updater.available_version()? else {
-        writeln!(output, "pm {CURRENT_VERSION} is up to date")?;
+        let status = super::style_text(
+            "is up to date",
+            anstyle::AnsiColor::Green.on_default(),
+            colors_enabled,
+        );
+        writeln!(output, "pm {CURRENT_VERSION} {status}")?;
         return Ok(());
     };
 
     if arguments.check {
-        writeln!(
-            output,
-            "pm {version} is available (current: {CURRENT_VERSION})"
-        )?;
+        let status = super::style_text(
+            "is available",
+            anstyle::AnsiColor::Yellow.on_default(),
+            colors_enabled,
+        );
+        writeln!(output, "pm {version} {status} (current: {CURRENT_VERSION})")?;
         return Ok(());
     }
 
     let installed_version = updater.install(&version)?;
+    let status = super::style_text(
+        "updated pm",
+        anstyle::AnsiColor::Green.on_default(),
+        colors_enabled,
+    );
     writeln!(
         output,
-        "updated pm from {CURRENT_VERSION} to {installed_version}"
+        "{status} from {CURRENT_VERSION} to {installed_version}"
     )?;
     Ok(())
 }
@@ -138,13 +155,30 @@ mod tests {
         };
         let mut output = Vec::new();
 
-        run_with(UpdateArgs { check: true }, &updater, &mut output).unwrap();
+        run_with(UpdateArgs { check: true }, &updater, &mut output, false).unwrap();
 
         assert_eq!(
             String::from_utf8(output).unwrap(),
             format!("pm 9.0.0 is available (current: {CURRENT_VERSION})\n")
         );
         assert!(!updater.installed.get());
+    }
+
+    #[test]
+    fn colors_available_update_status_when_enabled() {
+        let updater = FakeUpdater {
+            available: Some("9.0.0".into()),
+            installed: Cell::new(false),
+        };
+        let mut output = Vec::new();
+
+        run_with(UpdateArgs { check: true }, &updater, &mut output, true).unwrap();
+
+        assert!(
+            String::from_utf8(output)
+                .unwrap()
+                .contains("\u{1b}[33mis available\u{1b}[0m")
+        );
     }
 
     #[test]
@@ -155,7 +189,7 @@ mod tests {
         };
         let mut output = Vec::new();
 
-        run_with(UpdateArgs { check: false }, &updater, &mut output).unwrap();
+        run_with(UpdateArgs { check: false }, &updater, &mut output, false).unwrap();
 
         assert_eq!(
             String::from_utf8(output).unwrap(),
@@ -172,7 +206,7 @@ mod tests {
         };
         let mut output = Vec::new();
 
-        run_with(UpdateArgs { check: false }, &updater, &mut output).unwrap();
+        run_with(UpdateArgs { check: false }, &updater, &mut output, false).unwrap();
 
         assert_eq!(
             String::from_utf8(output).unwrap(),

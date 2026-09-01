@@ -1,3 +1,4 @@
+use anstyle::{AnsiColor, Style};
 use similar::TextDiff;
 
 use crate::{
@@ -10,7 +11,10 @@ use crate::{
     },
 };
 
-use super::{current_local_offset, format_local_timestamp, format_table, write_stdout};
+use super::{
+    current_local_offset, format_local_timestamp, format_table, stdout_supports_color, style_text,
+    write_stdout,
+};
 
 pub fn run(arguments: HistoryArgs, database: &Database) -> Result<()> {
     validate_name(&arguments.name)?;
@@ -38,7 +42,16 @@ fn list_versions(name: &str, database: &Database) -> Result<()> {
             ])
         })
         .collect::<Result<Vec<_>>>()?;
-    write_stdout(&format_table(&HEADERS, &rows))
+    write_stdout(&format_table(
+        &HEADERS,
+        &rows,
+        &[
+            Style::new().dimmed(),
+            Style::new().dimmed(),
+            AnsiColor::Cyan.on_default(),
+        ],
+        stdout_supports_color(),
+    ))
 }
 
 fn diff_versions(name: &str, arguments: HistoryDiffArgs, database: &Database) -> Result<()> {
@@ -53,7 +66,35 @@ fn diff_versions(name: &str, arguments: HistoryDiffArgs, database: &Database) ->
             &format!("{name}@{}", arguments.new),
         )
         .to_string();
-    write_stdout(&output)
+    write_stdout(&colorize_diff(&output, stdout_supports_color()))
+}
+
+fn colorize_diff(diff: &str, colors_enabled: bool) -> String {
+    if !colors_enabled {
+        return diff.to_owned();
+    }
+
+    diff.split_inclusive('\n')
+        .map(|line| {
+            let (content, newline) = line
+                .strip_suffix('\n')
+                .map_or((line, ""), |content| (content, "\n"));
+            let style = if content.starts_with("--- ") {
+                AnsiColor::Red.on_default().bold()
+            } else if content.starts_with("+++ ") {
+                AnsiColor::Green.on_default().bold()
+            } else if content.starts_with("@@") {
+                AnsiColor::Cyan.on_default()
+            } else if content.starts_with('-') {
+                AnsiColor::Red.on_default()
+            } else if content.starts_with('+') {
+                AnsiColor::Green.on_default()
+            } else {
+                Style::new()
+            };
+            format!("{}{newline}", style_text(content, style, true))
+        })
+        .collect()
 }
 
 fn document(version: PromptVersion) -> PromptDocument {
@@ -63,5 +104,30 @@ fn document(version: PromptVersion) -> PromptDocument {
         tags: version.tags,
         exec: version.exec,
         content: version.content,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::colorize_diff;
+
+    #[test]
+    fn colors_diff_lines_by_meaning() {
+        let diff = "--- old\n+++ new\n@@ -1 +1 @@\n-old\n+new\n unchanged\n";
+        let colored = colorize_diff(diff, true);
+
+        assert!(colored.contains("\u{1b}[1m\u{1b}[31m--- old\u{1b}[0m"));
+        assert!(colored.contains("\u{1b}[1m\u{1b}[32m+++ new\u{1b}[0m"));
+        assert!(colored.contains("\u{1b}[36m@@ -1 +1 @@\u{1b}[0m"));
+        assert!(colored.contains("\u{1b}[31m-old\u{1b}[0m"));
+        assert!(colored.contains("\u{1b}[32m+new\u{1b}[0m"));
+        assert!(colored.ends_with(" unchanged\n"));
+    }
+
+    #[test]
+    fn leaves_diff_plain_when_colors_are_disabled() {
+        let diff = "--- old\n+++ new\n-old\n+new\n";
+
+        assert_eq!(colorize_diff(diff, false), diff);
     }
 }

@@ -7,7 +7,8 @@ fn main() {
             std::process::exit(code);
         }
 
-        eprintln!("error: {error}");
+        const ERROR_STYLE: anstyle::Style = anstyle::AnsiColor::Red.on_default().bold();
+        anstream::eprintln!("{ERROR_STYLE}error:{ERROR_STYLE:#} {error}");
         std::process::exit(1);
     }
 }

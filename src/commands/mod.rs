@@ -18,6 +18,8 @@ use std::{
     process::{Command as ProcessCommand, Stdio},
 };
 
+use anstream::{AutoStream, ColorChoice};
+use anstyle::Style;
 use time::{OffsetDateTime, UtcOffset};
 
 use crate::{
@@ -60,6 +62,18 @@ fn write_stdout(value: &str) -> Result<()> {
     output.write_all(value.as_bytes())?;
     output.flush()?;
     Ok(())
+}
+
+fn stdout_supports_color() -> bool {
+    !matches!(AutoStream::choice(&io::stdout()), ColorChoice::Never)
+}
+
+fn style_text(value: &str, style: Style, colors_enabled: bool) -> String {
+    if colors_enabled {
+        format!("{style}{value}{style:#}")
+    } else {
+        value.to_owned()
+    }
 }
 
 fn write_paged_stdout(value: &str) -> Result<()> {
@@ -142,6 +156,8 @@ fn format_local_timestamp(timestamp: i64, local_offset: UtcOffset) -> Result<Str
 fn format_table<const COLUMNS: usize>(
     headers: &[&str; COLUMNS],
     rows: &[[String; COLUMNS]],
+    column_styles: &[Style; COLUMNS],
+    colors_enabled: bool,
 ) -> String {
     let widths = std::array::from_fn(|column| {
         rows.iter()
@@ -152,34 +168,53 @@ fn format_table<const COLUMNS: usize>(
     });
 
     let mut lines = Vec::with_capacity(rows.len() + 2);
-    lines.push(format_table_row(headers, &widths));
-    lines.push(
-        widths
-            .iter()
-            .map(|width| "─".repeat(*width))
-            .collect::<Vec<_>>()
-            .join("  "),
+    lines.push(format_table_row(
+        headers,
+        &widths,
+        &[Style::new().bold(); COLUMNS],
+        colors_enabled,
+    ));
+    let separator = widths
+        .iter()
+        .map(|width| "─".repeat(*width))
+        .collect::<Vec<_>>()
+        .join("  ");
+    lines.push(style_text(
+        &separator,
+        Style::new().dimmed(),
+        colors_enabled,
+    ));
+    lines.extend(
+        rows.iter()
+            .map(|row| format_table_row(row, &widths, column_styles, colors_enabled)),
     );
-    lines.extend(rows.iter().map(|row| format_table_row(row, &widths)));
     format!("{}\n", lines.join("\n"))
 }
 
 fn format_table_row<const COLUMNS: usize, S: AsRef<str>>(
     columns: &[S; COLUMNS],
     widths: &[usize; COLUMNS],
+    styles: &[Style; COLUMNS],
+    colors_enabled: bool,
 ) -> String {
     columns
         .iter()
         .enumerate()
         .map(|(index, value)| {
             let value = value.as_ref();
-            let padding = widths[index] - value.chars().count();
-            format!("{value}{}", " ".repeat(padding))
+            let padding = if index + 1 == COLUMNS {
+                0
+            } else {
+                widths[index] - value.chars().count()
+            };
+            format!(
+                "{}{}",
+                style_text(value, styles[index], colors_enabled),
+                " ".repeat(padding)
+            )
         })
         .collect::<Vec<_>>()
         .join("  ")
-        .trim_end()
-        .to_owned()
 }
 
 fn document_to_input(document: PromptDocument) -> PromptInput {
@@ -206,7 +241,23 @@ fn prompt_to_document(prompt: Prompt) -> PromptDocument {
 mod tests {
     use std::fs;
 
+    use anstyle::AnsiColor;
+
     use super::*;
+
+    #[test]
+    fn colors_table_cells_without_affecting_layout() {
+        let headers = ["ID", "NAME"];
+        let rows = [["1".to_owned(), "alpha".to_owned()]];
+        let styles = [Style::new().dimmed(), AnsiColor::Cyan.on_default()];
+        let plain = format_table(&headers, &rows, &styles, false);
+        let colored = format_table(&headers, &rows, &styles, true);
+
+        assert_eq!(anstream::adapter::strip_str(&colored).to_string(), plain);
+        assert!(colored.contains("\u{1b}[1mID\u{1b}[0m"));
+        assert!(colored.contains("\u{1b}[2m1\u{1b}[0m"));
+        assert!(colored.contains("\u{1b}[36malpha\u{1b}[0m"));
+    }
 
     #[test]
     fn sends_output_to_pager_stdin() {

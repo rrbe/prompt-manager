@@ -6,10 +6,14 @@ use crate::{
 };
 use std::time::Duration;
 
+use anstyle::{AnsiColor, Style};
 use time::{OffsetDateTime, UtcOffset};
 use timeago::{Formatter, TimeUnit};
 
-use super::{current_local_offset, format_local_timestamp, format_table, write_paged_stdout};
+use super::{
+    current_local_offset, format_local_timestamp, format_table, stdout_supports_color,
+    write_paged_stdout,
+};
 
 pub fn run(arguments: ListArgs, database: &Database) -> Result<()> {
     if let Some(group) = arguments.group.as_deref() {
@@ -37,10 +41,20 @@ pub fn run(arguments: ListArgs, database: &Database) -> Result<()> {
 
     let now = OffsetDateTime::now_utc().unix_timestamp();
     let local_offset = current_local_offset()?;
-    write_paged_stdout(&render_table(&prompts, now, local_offset)?)
+    write_paged_stdout(&render_table(
+        &prompts,
+        now,
+        local_offset,
+        stdout_supports_color(),
+    )?)
 }
 
-fn render_table(prompts: &[PromptListEntry], now: i64, local_offset: UtcOffset) -> Result<String> {
+fn render_table(
+    prompts: &[PromptListEntry],
+    now: i64,
+    local_offset: UtcOffset,
+    colors_enabled: bool,
+) -> Result<String> {
     const HEADERS: [&str; 4] = ["ID", "NAME", "UPDATED AT", "LAST USE"];
 
     let mut relative_time = Formatter::new();
@@ -59,7 +73,17 @@ fn render_table(prompts: &[PromptListEntry], now: i64, local_offset: UtcOffset) 
             ])
         })
         .collect::<Result<Vec<_>>>()?;
-    Ok(format_table(&HEADERS, &rows))
+    Ok(format_table(
+        &HEADERS,
+        &rows,
+        &[
+            Style::new().dimmed(),
+            AnsiColor::Cyan.on_default(),
+            Style::new().dimmed(),
+            Style::new().dimmed(),
+        ],
+        colors_enabled,
+    ))
 }
 
 fn sort(prompts: &mut [PromptListEntry], sort: ListSort, reverse: bool) {
@@ -209,7 +233,7 @@ mod tests {
         ];
 
         assert_eq!(
-            render_table(&prompts, 7_201, UtcOffset::UTC).unwrap(),
+            render_table(&prompts, 7_201, UtcOffset::UTC, false).unwrap(),
             "ID  NAME         UPDATED AT        LAST USE\n\
              ──  ───────────  ────────────────  ──────────\n\
              2   alpha        1970-01-01 00:00  1 hour ago\n\
