@@ -7,6 +7,7 @@ use crate::{
         markdown::{self, PromptDocument},
         validate_name,
     },
+    stdin,
 };
 
 use super::document_to_input;
@@ -16,13 +17,21 @@ pub fn run(arguments: AddArgs, database: &mut Database) -> Result<()> {
     if database.prompt_exists(&arguments.name)? {
         return Err(Error::PromptAlreadyExists(arguments.name));
     }
-    let initial = markdown::export(&PromptDocument {
+    let mut document = PromptDocument {
         name: arguments.name,
         description: None,
         tags: Vec::new(),
         exec: None,
         content: String::new(),
-    })?;
-    let document = editor::edit_until_valid(&initial, markdown::parse)?;
+    };
+    if let Some(content) = stdin::read_piped_input_if_available()? {
+        document.content = content;
+    }
+    let initial = markdown::export(&document)?;
+    let document = if arguments.no_edit {
+        markdown::parse(&initial)?
+    } else {
+        editor::edit_until_valid(&initial, markdown::parse)?
+    };
     database.create_prompt(&document_to_input(document))
 }

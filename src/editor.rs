@@ -40,7 +40,7 @@ fn edit_file_until_valid<T>(
         let status = Command::new(program)
             .args(arguments)
             .arg(path)
-            .stdin(Stdio::inherit())
+            .stdin(editor_stdin())
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
             .status()?;
@@ -63,6 +63,17 @@ fn edit_file_until_valid<T>(
             Err(error) => return Err(error),
         }
     }
+}
+
+fn editor_stdin() -> Stdio {
+    #[cfg(unix)]
+    if !io::stdin().is_terminal()
+        && let Ok(terminal) = fs::File::open("/dev/tty")
+    {
+        return Stdio::from(terminal);
+    }
+
+    Stdio::inherit()
 }
 
 fn editor_command() -> Result<Vec<String>> {

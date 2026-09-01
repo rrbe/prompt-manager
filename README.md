@@ -32,6 +32,9 @@ cargo install --path .                        # Install to ~/.cargo/bin
 ```bash
 pm add code-review
 pm add work/week-report
+generate-prompt | pm add generated
+pm add from-file < prompt-body.md
+generate-prompt | pm add generated --no-edit
 pm list
 pm get code-review
 pm get code-review | codex exec -
@@ -41,7 +44,7 @@ pm edit code-review
 pm rm code-review
 ```
 
-`add` and `edit` select an editor in this order: `$VISUAL`, `$EDITOR`, then `vi`. `rm` asks for terminal confirmation by default; use `--force` to skip it.
+`add` uses piped or redirected stdin as the initial prompt body before opening the editor. Pass `--no-edit` to validate and save directly instead. `add` and `edit` select an editor in this order: `$VISUAL`, `$EDITOR`, then `vi`. `rm` asks for terminal confirmation by default; use `--force` to skip it.
 
 Prompts use Markdown with YAML front matter:
 

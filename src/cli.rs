@@ -18,7 +18,10 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    /// Create a prompt using an external editor.
+    /// Create a prompt from stdin or an external editor.
+    #[command(
+        after_long_help = "Examples:\n  # Edit a prompt initialized from piped output\n  generate-prompt | pm add generated\n\n  # Edit a prompt initialized from a file's contents\n  pm add from-file < prompt-body.md\n\n  # Save piped output without opening the editor\n  generate-prompt | pm add generated --no-edit"
+    )]
     Add(AddArgs),
     /// Edit an existing prompt using an external editor.
     Edit(NameArgs),
@@ -65,6 +68,10 @@ pub struct NameArgs {
 #[derive(Debug, Args)]
 pub struct AddArgs {
     pub name: String,
+
+    /// Save without opening the editor.
+    #[arg(long)]
+    pub no_edit: bool,
 }
 
 #[derive(Debug, Args)]

@@ -29,6 +29,142 @@ fn import_prompt(data_home: &Path, file_name: &str, markdown: &str) {
         .stderr("");
 }
 
+#[cfg(unix)]
+#[test]
+fn add_opens_piped_stdin_as_the_initial_prompt_body() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let directory = TempDir::new().unwrap();
+    let snapshot = directory.path().join("editor-snapshot.md");
+    let editor = directory.path().join("editor.sh");
+    fs::write(
+        &editor,
+        "#!/bin/sh\ncp \"$1\" \"$EDITOR_SNAPSHOT\"\nprintf '%s' 'edited in editor' >> \"$1\"\n",
+    )
+    .unwrap();
+    fs::set_permissions(&editor, fs::Permissions::from_mode(0o700)).unwrap();
+
+    pm(directory.path())
+        .env("VISUAL", &editor)
+        .env("EDITOR_SNAPSHOT", &snapshot)
+        .args(["add", "piped"])
+        .write_stdin("first line\nsecond line\n")
+        .assert()
+        .success()
+        .stdout("")
+        .stderr("");
+    assert!(
+        fs::read_to_string(snapshot)
+            .unwrap()
+            .ends_with("first line\nsecond line\n")
+    );
+
+    pm(directory.path())
+        .args(["get", "piped"])
+        .assert()
+        .success()
+        .stdout("first line\nsecond line\nedited in editor")
+        .stderr("");
+}
+
+#[cfg(unix)]
+#[test]
+fn add_opens_a_redirected_file_as_the_initial_prompt_body() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let directory = TempDir::new().unwrap();
+    let body = write_prompt(directory.path(), "body.txt", "redirected body\n");
+    let input = fs::File::open(body).unwrap();
+    let editor = directory.path().join("editor.sh");
+    fs::write(
+        &editor,
+        "#!/bin/sh\nprintf '%s' 'edited in editor' >> \"$1\"\n",
+    )
+    .unwrap();
+    fs::set_permissions(&editor, fs::Permissions::from_mode(0o700)).unwrap();
+    let output = std::process::Command::new(assert_cmd::cargo::cargo_bin!("pm"))
+        .env("XDG_DATA_HOME", directory.path())
+        .env("VISUAL", &editor)
+        .env_remove("EDITOR")
+        .args(["add", "redirected"])
+        .stdin(input)
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    assert!(output.stdout.is_empty(), "{output:?}");
+    assert!(output.stderr.is_empty(), "{output:?}");
+
+    pm(directory.path())
+        .args(["get", "redirected"])
+        .assert()
+        .success()
+        .stdout("redirected body\nedited in editor")
+        .stderr("");
+}
+
+#[cfg(unix)]
+#[test]
+fn add_no_edit_saves_stdin_without_opening_the_editor() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let directory = TempDir::new().unwrap();
+    let marker = directory.path().join("editor-opened");
+    let editor = directory.path().join("editor.sh");
+    fs::write(&editor, "#!/bin/sh\ntouch \"$EDITOR_MARKER\"\n").unwrap();
+    fs::set_permissions(&editor, fs::Permissions::from_mode(0o700)).unwrap();
+
+    pm(directory.path())
+        .env("VISUAL", &editor)
+        .env("EDITOR_MARKER", &marker)
+        .args(["add", "direct", "--no-edit"])
+        .write_stdin("direct body\n")
+        .assert()
+        .success()
+        .stdout("")
+        .stderr("");
+    assert!(!marker.exists());
+
+    pm(directory.path())
+        .args(["get", "direct"])
+        .assert()
+        .success()
+        .stdout("direct body\n")
+        .stderr("");
+
+    pm(directory.path())
+        .env("VISUAL", &editor)
+        .env("EDITOR_MARKER", &marker)
+        .args(["add", "empty", "--no-edit"])
+        .assert()
+        .success()
+        .stdout("")
+        .stderr("");
+    assert!(!marker.exists());
+
+    pm(directory.path())
+        .args(["get", "empty"])
+        .assert()
+        .success()
+        .stdout("")
+        .stderr("");
+}
+
+#[test]
+fn add_no_edit_validates_the_prompt_body() {
+    let directory = TempDir::new().unwrap();
+
+    pm(directory.path())
+        .args(["add", "invalid-template", "--no-edit"])
+        .write_stdin("{{ daily report content }}")
+        .assert()
+        .failure()
+        .code(1)
+        .stdout("")
+        .stderr(predicate::str::contains(
+            "invalid template syntax at line 5, column 1: invalid expression `{{ daily report content }}`",
+        ));
+}
+
 #[test]
 fn renders_piped_input_and_explicit_variables_with_clean_stdout() {
     let directory = TempDir::new().unwrap();
@@ -951,48 +1087,19 @@ fn add_rejects_an_existing_name_before_opening_the_editor() {
 
 #[cfg(unix)]
 #[test]
-fn add_and_edit_use_an_external_editor_and_protect_original_on_failure() {
+fn edit_uses_an_external_editor_and_protects_the_original_on_failure() {
     use std::os::unix::fs::PermissionsExt;
 
     let directory = TempDir::new().unwrap();
+    import_prompt(
+        directory.path(),
+        "created.md",
+        "---\nname: created\ntags:\n  - test\n---\n\nfirst body",
+    );
     let editor = directory.path().join("editor.sh");
-    fs::write(
-        &editor,
-        "#!/bin/sh\nprintf '%s' '---\nname: created\ntags:\n  - test\n---\n\nfirst body' > \"$1\"\n",
-    )
-    .unwrap();
+    fs::write(&editor, "#!/bin/sh\nexit 7\n").unwrap();
     fs::set_permissions(&editor, fs::Permissions::from_mode(0o700)).unwrap();
 
-    pm(directory.path())
-        .env("VISUAL", &editor)
-        .args(["add", "initial-name"])
-        .assert()
-        .success()
-        .stdout("")
-        .stderr("");
-    pm(directory.path())
-        .args(["get", "created"])
-        .assert()
-        .success()
-        .stdout("first body");
-
-    fs::write(
-        &editor,
-        "#!/bin/sh\nprintf '%s' '---\nname: invalid-template\n---\n\n{{ daily report content }}' > \"$1\"\n",
-    )
-    .unwrap();
-    pm(directory.path())
-        .env("VISUAL", &editor)
-        .args(["add", "invalid-template"])
-        .assert()
-        .failure()
-        .code(1)
-        .stdout("")
-        .stderr(predicate::str::contains(
-            "invalid template syntax at line 5, column 1: invalid expression `{{ daily report content }}`",
-        ));
-
-    fs::write(&editor, "#!/bin/sh\nexit 7\n").unwrap();
     pm(directory.path())
         .env("VISUAL", &editor)
         .args(["edit", "created"])

@@ -7,12 +7,25 @@ pub fn read_piped_input() -> Result<String> {
     read_input(stdin.is_terminal(), stdin.lock())
 }
 
+pub fn read_piped_input_if_available() -> Result<Option<String>> {
+    let stdin = io::stdin();
+    read_optional_input(stdin.is_terminal(), stdin.lock())
+}
+
 fn read_input(is_terminal: bool, reader: impl Read) -> Result<String> {
     if is_terminal {
         return Err(Error::MissingVariable("input".into()));
     }
 
     read_utf8(reader)
+}
+
+fn read_optional_input(is_terminal: bool, reader: impl Read) -> Result<Option<String>> {
+    if is_terminal {
+        return Ok(None);
+    }
+
+    read_utf8(reader).map(Some)
 }
 
 fn read_utf8(mut reader: impl Read) -> Result<String> {
@@ -39,5 +52,18 @@ mod tests {
     fn refuses_to_read_interactive_input() {
         let error = read_input(true, &b"ignored"[..]).unwrap_err();
         assert!(matches!(error, Error::MissingVariable(name) if name == "input"));
+    }
+
+    #[test]
+    fn reads_optional_piped_input_when_available() {
+        assert_eq!(
+            read_optional_input(false, &b"prompt body"[..]).unwrap(),
+            Some("prompt body".into())
+        );
+        assert_eq!(
+            read_optional_input(false, &b""[..]).unwrap(),
+            Some(String::new())
+        );
+        assert_eq!(read_optional_input(true, &b"ignored"[..]).unwrap(), None);
     }
 }
