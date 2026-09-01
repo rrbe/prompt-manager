@@ -38,7 +38,10 @@ pub enum Command {
         after_long_help = "Examples:\n  # Execute the configured command\n  pm exec prompt-name\n\n  # Append arguments to the configured command\n  pm exec prompt-name -- --model gpt-5.4"
     )]
     Exec(ExecArgs),
-    /// List prompts with edit and usage times.
+    /// List prompts and usage information.
+    #[command(
+        after_long_help = "Examples:\n  # Show the default usage table\n  pm list\n\n  # Show all prompt metadata except content\n  pm list --full\n\n  # Print prompt names for a pipeline\n  pm list --quiet | fzf"
+    )]
     List(ListArgs),
     /// Search prompt names, descriptions, and bodies.
     Search(SearchArgs),
@@ -147,8 +150,16 @@ pub struct ListArgs {
     #[arg(long)]
     pub favorite: bool,
 
+    /// Show all prompt metadata except content.
+    #[arg(long, conflicts_with = "quiet")]
+    pub full: bool,
+
+    /// Print only prompt names.
+    #[arg(short, long, conflicts_with = "full")]
+    pub quiet: bool,
+
     /// Sort the result.
-    #[arg(long, value_enum, default_value_t = ListSort::Name)]
+    #[arg(long, value_enum, default_value_t = ListSort::Used)]
     pub sort: ListSort,
 
     /// Reverse the selected sort order.
@@ -158,9 +169,9 @@ pub struct ListArgs {
 
 #[derive(Clone, Copy, Debug, Default, ValueEnum)]
 pub enum ListSort {
-    #[default]
     Name,
     Updated,
+    #[default]
     Used,
 }
 

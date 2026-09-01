@@ -295,7 +295,7 @@ fn exec_renders_stdin_and_variables_and_appends_arguments() {
         .stderr("");
 
     pm(directory.path())
-        .args(["list", "--sort", "used"])
+        .arg("list")
         .assert()
         .success()
         .stdout(predicate::str::contains("now"))
@@ -585,7 +585,7 @@ fn list_renders_a_table_and_search_has_a_stable_line_format() {
     import_prompt(
         directory.path(),
         "beta.md",
-        "---\nname: beta\ndescription: Mongo\tcheck\ntags:\n  - database\n---\n\nOther body",
+        "---\nname: beta\ndescription: Mongo\tcheck\ntags:\n  - database\nexec: codex exec -\n---\n\nOther body",
     );
     import_prompt(
         directory.path(),
@@ -600,7 +600,7 @@ fn list_renders_a_table_and_search_has_a_stable_line_format() {
         .success()
         .stdout(
             predicate::str::is_match(
-                "^ID  NAME   UPDATED AT +LAST USE\n──  ─────  ─{16}  ─{8}\n2   alpha  [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}  -\n1   beta   [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}  -\n$",
+                "^ID  NAME   USES  LAST USE\n──  ─────  ─{4}  ─{8}\n2   alpha  0     -\n1   beta   0     -\n$",
             )
             .unwrap(),
         )
@@ -609,9 +609,35 @@ fn list_renders_a_table_and_search_has_a_stable_line_format() {
         .args(["list", "--tag", "coding"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("ID  NAME   UPDATED AT"))
+        .stdout(predicate::str::contains("ID  NAME   USES"))
         .stdout(predicate::str::contains("\n2   alpha  "))
         .stderr("");
+    pm(directory.path())
+        .args(["list", "-q"])
+        .env("CLICOLOR_FORCE", "1")
+        .env("PAGER", "false")
+        .assert()
+        .success()
+        .stdout("alpha\nbeta\n")
+        .stderr("");
+    pm(directory.path())
+        .args(["list", "--full"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("ID  NAME   TAGS"))
+        .stdout(predicate::str::contains("FAVORITE  USES  CREATED AT"))
+        .stdout(predicate::str::contains("coding"))
+        .stdout(predicate::str::contains("database"))
+        .stdout(predicate::str::contains("codex exec -"))
+        .stdout(predicate::str::contains("Mongo check"))
+        .stderr("");
+    pm(directory.path())
+        .args(["list", "--full", "--quiet"])
+        .assert()
+        .failure()
+        .code(2)
+        .stdout("")
+        .stderr(predicate::str::contains("cannot be used with"));
     pm(directory.path())
         .args(["search", "Mongo"])
         .assert()
@@ -627,6 +653,22 @@ fn list_renders_a_table_and_search_has_a_stable_line_format() {
         .stderr(predicate::str::contains(
             "unexpected argument '--name-only'",
         ));
+}
+
+#[test]
+fn list_help_explains_default_full_and_quiet_output() {
+    let directory = TempDir::new().unwrap();
+
+    pm(directory.path())
+        .args(["list", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "Show all prompt metadata except content",
+        ))
+        .stdout(predicate::str::contains("Print only prompt names"))
+        .stdout(predicate::str::contains("pm list --quiet | fzf"))
+        .stderr("");
 }
 
 #[test]
@@ -710,18 +752,18 @@ fn list_supports_sorting_and_favorite_filters() {
         .success()
         .stdout(
             predicate::str::is_match(
-                "^ID  NAME        UPDATED AT +LAST USE\n[^\n]*\n2   beta-list   [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}  (now|[^\n]+ ago)\n1   alpha-list  [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}  -\n$",
+                "^ID  NAME        USES  LAST USE\n[^\n]*\n2   beta-list   1     (now|[^\n]+ ago)\n1   alpha-list  0     -\n$",
             )
             .unwrap(),
         )
         .stderr("");
     pm(directory.path())
-        .args(["list", "--sort", "used", "-r"])
+        .args(["list", "-r"])
         .assert()
         .success()
         .stdout(
             predicate::str::is_match(
-                "^ID  NAME        UPDATED AT +LAST USE\n[^\n]*\n1   alpha-list  [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}  -\n2   beta-list   [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}  (now|[^\n]+ ago)\n$",
+                "^ID  NAME        USES  LAST USE\n[^\n]*\n1   alpha-list  0     -\n2   beta-list   1     (now|[^\n]+ ago)\n$",
             )
             .unwrap(),
         )

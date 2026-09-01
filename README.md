@@ -155,15 +155,17 @@ pm list
 pm list work/
 pm list --tag coding
 pm list --favorite
+pm list --full
+pm list --quiet
 pm list --sort updated
 pm list --sort updated --reverse
 pm list --sort used
 pm search mongo
 ```
 
-`list` displays stable IDs accepted by `pm get --id ID`, prompt names, local update times to the minute, and relative last-use times in an aligned table. Pass a group ending in `/`, such as `pm list work/`, to recursively list prompts in that group while keeping their full names. Nested groups are supported. `--sort updated` sorts by update time, and `--sort used` sorts by most recent use. Pass `-r` or `--reverse` to reverse the selected sort order.
+`list` displays stable IDs accepted by `pm get --id ID`, prompt names, use counts, and relative last-use times in an aligned table. It sorts by most recent use by default. `--full` adds tags, favorite state, creation and update times, configured commands, and descriptions. `-q` or `--quiet` prints only prompt names, one per line. Pass a group ending in `/`, such as `pm list work/`, to recursively list prompts in that group while keeping their full names. Nested groups are supported. `--sort updated` sorts by update time, and `--sort used` sorts by most recent use. Pass `-r` or `--reverse` to reverse the selected sort order.
 
-When stdout is a terminal, `list` sends its table through `$PAGER`, or `less -FRX` when `$PAGER` is unset. Piped and redirected output remains complete plain text. Set `PAGER=cat` to disable interactive paging.
+When stdout is a terminal, the default and full tables are sent through `$PAGER`, or `less -FRX` when `$PAGER` is unset. Piped and redirected output remains complete plain text. Quiet output has no header, color, or paging. Set `PAGER=cat` to disable interactive paging.
 
 Use favorites together with `list --favorite`:
 
@@ -181,7 +183,7 @@ pm history code-review
 pm history code-review diff 1 3
 ```
 
-History lists versions in an aligned table. Its timestamps use local time to the minute, matching `pm list`.
+History lists versions in an aligned table. Its timestamps use local time to the minute.
 
 ## Import and Export
 

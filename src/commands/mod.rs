@@ -76,6 +76,16 @@ fn style_text(value: &str, style: Style, colors_enabled: bool) -> String {
     }
 }
 
+fn clean_inline(value: &str) -> String {
+    value
+        .chars()
+        .map(|character| match character {
+            '\t' | '\r' | '\n' => ' ',
+            _ => character,
+        })
+        .collect()
+}
+
 fn write_paged_stdout(value: &str) -> Result<()> {
     if !io::stdout().is_terminal() {
         return write_stdout(value);

@@ -32,8 +32,14 @@ pub struct PromptInput {
 pub struct PromptListEntry {
     pub id: i64,
     pub name: String,
+    pub description: Option<String>,
+    pub tags: Vec<String>,
+    pub exec: Option<String>,
+    pub created_at: i64,
     pub updated_at: i64,
     pub last_used_at: Option<i64>,
+    pub use_count: i64,
+    pub favorite: bool,
 }
 
 impl Database {
@@ -177,8 +183,12 @@ impl Database {
         favorite_only: bool,
     ) -> Result<Vec<PromptListEntry>> {
         let mut statement = self.connection.prepare(
-            "SELECT prompts.id, prompts.name, prompts.updated_at, prompts.last_used_at\n\
+            "SELECT prompts.id, prompts.name, prompts.description, prompts.exec,\n\
+                    prompts.created_at, prompts.updated_at, prompts.last_used_at,\n\
+                    prompts.use_count, prompts.favorite, tags.name\n\
              FROM prompts\n\
+             LEFT JOIN prompt_tags ON prompt_tags.prompt_id = prompts.id\n\
+             LEFT JOIN tags ON tags.id = prompt_tags.tag_id\n\
              WHERE (?1 IS NULL OR substr(prompts.name, 1, length(?1)) = ?1)\n\
              AND (?2 IS NULL OR EXISTS (\n\
                  SELECT 1\n\
@@ -187,18 +197,35 @@ impl Database {
                  WHERE prompt_tags.prompt_id = prompts.id AND tags.name = ?2\n\
              ))\n\
              AND (?3 = 0 OR prompts.favorite = 1)\n\
-             ORDER BY prompts.name",
+             ORDER BY prompts.name, tags.name",
         )?;
-        let rows = statement.query_map(params![group, tag, favorite_only], |row| {
-            Ok(PromptListEntry {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                updated_at: row.get(2)?,
-                last_used_at: row.get(3)?,
-            })
-        })?;
-        rows.collect::<std::result::Result<Vec<_>, _>>()
-            .map_err(Into::into)
+        let mut rows = statement.query(params![group, tag, favorite_only])?;
+        let mut prompts = Vec::<PromptListEntry>::new();
+        while let Some(row) = rows.next()? {
+            let id = row.get(0)?;
+            if prompts.last().is_none_or(|prompt| prompt.id != id) {
+                prompts.push(PromptListEntry {
+                    id,
+                    name: row.get(1)?,
+                    description: row.get(2)?,
+                    tags: Vec::new(),
+                    exec: row.get(3)?,
+                    created_at: row.get(4)?,
+                    updated_at: row.get(5)?,
+                    last_used_at: row.get(6)?,
+                    use_count: row.get(7)?,
+                    favorite: row.get(8)?,
+                });
+            }
+            if let Some(tag) = row.get::<_, Option<String>>(9)? {
+                prompts
+                    .last_mut()
+                    .expect("the current prompt was added before its tag")
+                    .tags
+                    .push(tag);
+            }
+        }
+        Ok(prompts)
     }
 }
 
@@ -340,7 +367,7 @@ mod tests {
     fn filters_prompts_by_tag() {
         let mut database = Database::in_memory().unwrap();
         database
-            .create_prompt(&input("alpha", "a", &["coding"]))
+            .create_prompt(&input("alpha", "a", &["coding", "review"]))
             .unwrap();
         database
             .create_prompt(&input("beta", "b", &["writing"]))
@@ -348,13 +375,9 @@ mod tests {
         let prompts = database
             .list_prompts_filtered(None, Some("coding"), false)
             .unwrap();
-        assert_eq!(
-            prompts
-                .into_iter()
-                .map(|prompt| prompt.name)
-                .collect::<Vec<_>>(),
-            vec!["alpha"]
-        );
+        assert_eq!(prompts.len(), 1);
+        assert_eq!(prompts[0].name, "alpha");
+        assert_eq!(prompts[0].tags, ["coding", "review"]);
     }
 
     #[test]
