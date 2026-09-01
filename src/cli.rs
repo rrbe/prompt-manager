@@ -150,6 +150,10 @@ pub struct ListArgs {
     /// Sort the result.
     #[arg(long, value_enum, default_value_t = ListSort::Name)]
     pub sort: ListSort,
+
+    /// Reverse the selected sort order.
+    #[arg(short = 'r', long)]
+    pub reverse: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, ValueEnum)]

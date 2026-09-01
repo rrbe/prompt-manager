@@ -715,6 +715,17 @@ fn list_supports_sorting_and_favorite_filters() {
             .unwrap(),
         )
         .stderr("");
+    pm(directory.path())
+        .args(["list", "--sort", "used", "-r"])
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::is_match(
+                "^ID  NAME        UPDATED AT +LAST USE\n[^\n]*\n1   alpha-list  [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}  -\n2   beta-list   [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}  (now|[^\n]+ ago)\n$",
+            )
+            .unwrap(),
+        )
+        .stderr("");
 
     pm(directory.path())
         .args(["favorite", "beta-list", "--remove"])

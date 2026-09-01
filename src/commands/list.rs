@@ -30,7 +30,7 @@ pub fn run(arguments: ListArgs, database: &Database) -> Result<()> {
         tag.as_deref(),
         arguments.favorite,
     )?;
-    sort(&mut prompts, arguments.sort);
+    sort(&mut prompts, arguments.sort, arguments.reverse);
     if prompts.is_empty() {
         return Ok(());
     }
@@ -62,17 +62,19 @@ fn render_table(prompts: &[PromptListEntry], now: i64, local_offset: UtcOffset) 
     Ok(format_table(&HEADERS, &rows))
 }
 
-fn sort(prompts: &mut [PromptListEntry], sort: ListSort) {
-    prompts.sort_by(|left, right| match sort {
-        ListSort::Name => left.name.cmp(&right.name),
-        ListSort::Updated => right
-            .updated_at
-            .cmp(&left.updated_at)
-            .then_with(|| left.name.cmp(&right.name)),
-        ListSort::Used => right
-            .last_used_at
-            .cmp(&left.last_used_at)
-            .then_with(|| left.name.cmp(&right.name)),
+fn sort(prompts: &mut [PromptListEntry], sort: ListSort, reverse: bool) {
+    prompts.sort_by(|left, right| {
+        let ordering = match sort {
+            ListSort::Name => left.name.cmp(&right.name),
+            ListSort::Updated => right.updated_at.cmp(&left.updated_at),
+            ListSort::Used => right.last_used_at.cmp(&left.last_used_at),
+        };
+        let ordering = if reverse {
+            ordering.reverse()
+        } else {
+            ordering
+        };
+        ordering.then_with(|| left.name.cmp(&right.name))
     });
 }
 
@@ -101,8 +103,62 @@ mod tests {
                 last_used_at: Some(2),
             },
         ];
-        sort(&mut prompts, ListSort::Used);
+        sort(&mut prompts, ListSort::Used, false);
         assert_eq!(prompts[0].name, "used");
+    }
+
+    #[test]
+    fn reverses_the_primary_sort_order_and_keeps_name_ties_ascending() {
+        let prompts = vec![
+            PromptListEntry {
+                id: 1,
+                name: "alpha".into(),
+                updated_at: 1,
+                last_used_at: None,
+            },
+            PromptListEntry {
+                id: 2,
+                name: "beta".into(),
+                updated_at: 2,
+                last_used_at: Some(2),
+            },
+            PromptListEntry {
+                id: 3,
+                name: "gamma".into(),
+                updated_at: 2,
+                last_used_at: Some(2),
+            },
+        ];
+
+        let mut by_name = prompts.clone();
+        sort(&mut by_name, ListSort::Name, true);
+        assert_eq!(
+            by_name
+                .iter()
+                .map(|prompt| prompt.name.as_str())
+                .collect::<Vec<_>>(),
+            ["gamma", "beta", "alpha"]
+        );
+
+        let mut by_updated = prompts.clone();
+        sort(&mut by_updated, ListSort::Updated, true);
+        assert_eq!(
+            by_updated
+                .iter()
+                .map(|prompt| prompt.name.as_str())
+                .collect::<Vec<_>>(),
+            ["alpha", "beta", "gamma"]
+        );
+
+        let mut by_used = prompts;
+        sort(&mut by_used, ListSort::Used, true);
+        assert_eq!(
+            by_used
+                .iter()
+                .map(|prompt| prompt.name.as_str())
+                .collect::<Vec<_>>(),
+            ["alpha", "beta", "gamma"]
+        );
     }
 
     #[test]
