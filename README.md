@@ -83,7 +83,7 @@ pm get code-review \
   -v focus=correctness
 ```
 
-Use `--interactive` to fill each missing variable in template order. Values may span multiple lines; finish each value with a line containing only `EOF`. Surrounding whitespace is trimmed from each value. Prompts are written to stderr, and only the rendered result is written to stdout:
+Use `--interactive` to fill each missing variable in template order. Values may span multiple lines; finish each value with a line containing only `EOF`, or press Ctrl-D on an empty line in a Unix terminal. Surrounding whitespace is trimmed from each value. Prompts are written to stderr, and only the rendered result is written to stdout:
 
 ```bash
 pm get weekly-report --interactive

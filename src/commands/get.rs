@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    io::{self, BufRead, Write},
+    io::{self, BufRead, IsTerminal, Write},
     process::{Command, Stdio},
 };
 
@@ -48,7 +48,13 @@ pub(super) fn render(arguments: PromptArgs, database: &mut Database) -> Result<R
     if arguments.interactive {
         let input = io::stdin();
         let output = io::stderr();
-        prompt_for_variables(&content, &mut values, input.lock(), output.lock())?;
+        prompt_for_variables(
+            &content,
+            &mut values,
+            input.lock(),
+            output.lock(),
+            input.is_terminal(),
+        )?;
     } else {
         let needs_input = template::placeholders(&content)
             .iter()
@@ -151,6 +157,7 @@ fn prompt_for_variables(
     values: &mut HashMap<String, String>,
     mut input: impl BufRead,
     mut output: impl Write,
+    eof_finishes_value: bool,
 ) -> Result<()> {
     let mut names = Vec::new();
     for placeholder in template::placeholders(content) {
@@ -164,7 +171,7 @@ fn prompt_for_variables(
         writeln!(output, "[{}/{}] {name}", index + 1, total)?;
         writeln!(
             output,
-            "Enter or paste the value. Finish with a line containing only `EOF`."
+            "Enter or paste the value. Finish with a line containing only `EOF`, or press Ctrl-D on an empty line."
         )?;
         output.flush()?;
 
@@ -172,6 +179,9 @@ fn prompt_for_variables(
         loop {
             let mut line = String::new();
             if input.read_line(&mut line)? == 0 {
+                if eof_finishes_value {
+                    break;
+                }
                 return Err(Error::Message(format!(
                     "interactive input ended before completing variable: {name}"
                 )));
@@ -207,6 +217,7 @@ mod tests {
             &mut values,
             &b"one\nEOF\ntwo\nlines\nEOF\n"[..],
             &mut output,
+            false,
         )
         .unwrap();
 
@@ -215,7 +226,7 @@ mod tests {
         assert_eq!(values["second"], "two\nlines");
         assert_eq!(
             String::from_utf8(output).unwrap(),
-            "[1/2] first\nEnter or paste the value. Finish with a line containing only `EOF`.\n[2/2] second\nEnter or paste the value. Finish with a line containing only `EOF`.\n"
+            "[1/2] first\nEnter or paste the value. Finish with a line containing only `EOF`, or press Ctrl-D on an empty line.\n[2/2] second\nEnter or paste the value. Finish with a line containing only `EOF`, or press Ctrl-D on an empty line.\n"
         );
     }
 
@@ -228,6 +239,7 @@ mod tests {
             &mut values,
             &b"\n  first line\nsecond line  \n\nEOF\n"[..],
             Vec::new(),
+            false,
         )
         .unwrap();
 
@@ -241,6 +253,7 @@ mod tests {
             &mut HashMap::new(),
             &b"unfinished\n"[..],
             Vec::new(),
+            false,
         )
         .unwrap_err();
 
@@ -248,5 +261,21 @@ mod tests {
             error.to_string(),
             "interactive input ended before completing variable: value"
         );
+    }
+
+    #[test]
+    fn accepts_terminal_eof_as_the_value_terminator() {
+        let mut values = HashMap::new();
+
+        prompt_for_variables(
+            "{{value}}",
+            &mut values,
+            &b"first line\nsecond line\n"[..],
+            Vec::new(),
+            true,
+        )
+        .unwrap();
+
+        assert_eq!(values["value"], "first line\nsecond line");
     }
 }

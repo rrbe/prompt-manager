@@ -403,7 +403,7 @@ fn interactive_get_prompts_for_missing_variables_and_keeps_stdout_clean() {
         .success()
         .stdout("fixed\nShared first line\nsecond line\nfixed")
         .stderr(
-            "[1/1] details\nEnter or paste the value. Finish with a line containing only `EOF`.\n",
+            "[1/1] details\nEnter or paste the value. Finish with a line containing only `EOF`, or press Ctrl-D on an empty line.\n",
         );
 }
 
