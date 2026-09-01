@@ -39,6 +39,7 @@ pub(super) fn render(arguments: PromptArgs, database: &mut Database) -> Result<R
     validate_name(&name)?;
     let prompt = database.get_prompt(&name)?;
     let content = expand_compositions(database, &prompt.content, &mut vec![prompt.name.clone()])?;
+    template::validate(&content)?;
     let mut values = HashMap::new();
 
     for variable in arguments.variables {
@@ -56,11 +57,21 @@ pub(super) fn render(arguments: PromptArgs, database: &mut Database) -> Result<R
             input.is_terminal(),
         )?;
     } else {
-        let needs_input = template::placeholders(&content)
+        let placeholders = template::placeholders(&content);
+        let needs_input = placeholders
             .iter()
             .any(|placeholder| placeholder.name == "input");
         if needs_input && !values.contains_key("input") {
-            values.insert("input".into(), stdin::read_piped_input()?);
+            let has_default = placeholders
+                .iter()
+                .any(|placeholder| placeholder.name == "input" && placeholder.default.is_some());
+            if has_default {
+                if let Some(value) = stdin::read_piped_input_if_available()? {
+                    values.insert("input".into(), value);
+                }
+            } else {
+                values.insert("input".into(), stdin::read_piped_input()?);
+            }
         }
     }
 
@@ -159,10 +170,19 @@ fn prompt_for_variables(
     mut output: impl Write,
     eof_finishes_value: bool,
 ) -> Result<()> {
+    let placeholders = template::placeholders(content);
+    let defaulted_names: Vec<&str> = placeholders
+        .iter()
+        .filter(|placeholder| placeholder.default.is_some())
+        .map(|placeholder| placeholder.name.as_str())
+        .collect();
     let mut names = Vec::new();
-    for placeholder in template::placeholders(content) {
-        if !values.contains_key(&placeholder.name) && !names.contains(&placeholder.name) {
-            names.push(placeholder.name);
+    for placeholder in &placeholders {
+        if !values.contains_key(&placeholder.name)
+            && !defaulted_names.contains(&placeholder.name.as_str())
+            && !names.contains(&placeholder.name)
+        {
+            names.push(placeholder.name.clone());
         }
     }
 
@@ -213,7 +233,7 @@ mod tests {
         let mut output = Vec::new();
 
         prompt_for_variables(
-            "{{provided}} {{first}} {{second}} {{first}}",
+            "{{provided}} {{defaulted}} {{defaulted=fallback}} {{first}} {{second}} {{first}}",
             &mut values,
             &b"one\nEOF\ntwo\nlines\nEOF\n"[..],
             &mut output,
@@ -222,6 +242,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(values["provided"], "existing");
+        assert!(!values.contains_key("defaulted"));
         assert_eq!(values["first"], "one");
         assert_eq!(values["second"], "two\nlines");
         assert_eq!(

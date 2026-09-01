@@ -7,6 +7,7 @@ pub struct Placeholder {
     pub start: usize,
     pub end: usize,
     pub name: String,
+    pub default: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -33,6 +34,7 @@ pub fn validate(template: &str) -> Result<()> {
 
 pub(crate) fn validate_with_line_offset(template: &str, line_offset: usize) -> Result<()> {
     let mut cursor = 0;
+    let mut defaults = HashMap::new();
 
     loop {
         let opening = template[cursor..]
@@ -54,13 +56,29 @@ pub(crate) fn validate_with_line_offset(template: &str, line_offset: usize) -> R
         let closing = value_start + relative_closing;
         let candidate = template[value_start..closing].trim();
 
-        if !is_valid_variable_name(candidate) && composition_name(candidate).is_none() {
-            return Err(syntax_error(
-                template,
-                opening,
-                line_offset,
-                &format!("invalid expression `{}`", &template[opening..closing + 2]),
-            ));
+        match variable_expression(candidate) {
+            Some((name, Some(default))) => {
+                if let Some(existing) = defaults.insert(name, default)
+                    && existing != default
+                {
+                    return Err(syntax_error(
+                        template,
+                        opening,
+                        line_offset,
+                        &format!("conflicting defaults for variable `{name}`"),
+                    ));
+                }
+            }
+            Some((_, None)) => {}
+            None if composition_name(candidate).is_some() => {}
+            None => {
+                return Err(syntax_error(
+                    template,
+                    opening,
+                    line_offset,
+                    &format!("invalid expression `{}`", &template[opening..closing + 2]),
+                ));
+            }
         }
 
         cursor = closing + 2;
@@ -81,11 +99,12 @@ pub fn placeholders(template: &str) -> Vec<Placeholder> {
         let close = value_start + relative_close;
         let candidate = template[value_start..close].trim();
 
-        if is_valid_variable_name(candidate) {
+        if let Some((name, default)) = variable_expression(candidate) {
             result.push(Placeholder {
                 start: open,
                 end: close + 2,
-                name: candidate.to_owned(),
+                name: name.to_owned(),
+                default: default.map(str::to_owned),
             });
             cursor = close + 2;
         } else {
@@ -128,26 +147,60 @@ pub fn compositions(template: &str) -> Vec<Composition> {
 pub fn render(template: &str, values: &HashMap<String, String>) -> Result<String> {
     validate(template)?;
     let placeholders = placeholders(template);
+    let defaults: HashMap<&str, &str> = placeholders
+        .iter()
+        .filter_map(|placeholder| {
+            placeholder
+                .default
+                .as_deref()
+                .map(|default| (placeholder.name.as_str(), default))
+        })
+        .collect();
     for placeholder in &placeholders {
-        if !values.contains_key(&placeholder.name) {
+        if !values.contains_key(&placeholder.name)
+            && !defaults.contains_key(placeholder.name.as_str())
+        {
             return Err(Error::MissingVariable(placeholder.name.clone()));
         }
     }
 
     let extra_capacity: usize = placeholders
         .iter()
-        .filter_map(|placeholder| values.get(&placeholder.name))
-        .map(String::len)
+        .filter_map(|placeholder| {
+            values
+                .get(&placeholder.name)
+                .map(String::as_str)
+                .or_else(|| defaults.get(placeholder.name.as_str()).copied())
+        })
+        .map(str::len)
         .sum();
     let mut output = String::with_capacity(template.len() + extra_capacity);
     let mut cursor = 0;
-    for placeholder in placeholders {
+    for placeholder in &placeholders {
         output.push_str(&template[cursor..placeholder.start]);
-        output.push_str(&values[&placeholder.name]);
+        let value = values
+            .get(&placeholder.name)
+            .map(String::as_str)
+            .or_else(|| defaults.get(placeholder.name.as_str()).copied())
+            .expect("all placeholder values were checked before rendering");
+        output.push_str(value);
         cursor = placeholder.end;
     }
     output.push_str(&template[cursor..]);
     Ok(output)
+}
+
+fn variable_expression(candidate: &str) -> Option<(&str, Option<&str>)> {
+    let (name, default) = match candidate.split_once('=') {
+        Some((name, default)) => (name.trim(), Some(default.trim())),
+        None => (candidate, None),
+    };
+
+    if !is_valid_variable_name(name) || default.is_some_and(|value| value.contains("{{")) {
+        return None;
+    }
+
+    Some((name, default))
 }
 
 fn composition_name(candidate: &str) -> Option<&str> {
@@ -212,6 +265,8 @@ mod tests {
             "{{ daily report content }}",
             "{{1bad}}",
             "{{prompt:invalid name}}",
+            "{{language:-rust}}",
+            "{{value={{other}}",
             "{{value",
         ] {
             assert!(validate(template).is_err(), "{template} should be invalid");
@@ -221,6 +276,39 @@ mod tests {
                 .unwrap_err()
                 .to_string(),
             "invalid template syntax at line 2, column 1: invalid expression `{{ invalid name }}`"
+        );
+    }
+
+    #[test]
+    fn uses_consistent_defaults_for_missing_variables() {
+        assert_eq!(
+            render(
+                "{{language=rust}}/{{language}}/{{query=a=b}}",
+                &HashMap::new()
+            )
+            .unwrap(),
+            "rust/rust/a=b"
+        );
+    }
+
+    #[test]
+    fn explicit_values_override_defaults_including_with_an_empty_value() {
+        assert_eq!(
+            render("{{language=rust}}", &values(&[("language", "go")])).unwrap(),
+            "go"
+        );
+        assert_eq!(
+            render("{{language=rust}}", &values(&[("language", "")])).unwrap(),
+            ""
+        );
+    }
+
+    #[test]
+    fn rejects_conflicting_defaults_for_the_same_variable() {
+        let error = validate("{{language=rust}}\n{{ language = go }}").unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "invalid template syntax at line 2, column 1: conflicting defaults for variable `language`"
         );
     }
 

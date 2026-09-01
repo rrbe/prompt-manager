@@ -254,6 +254,30 @@ fn missing_variables_fail_without_stdout() {
         .stderr(predicate::str::contains("missing variable: language"));
 }
 
+#[test]
+fn get_uses_variable_defaults_and_explicit_values_override_them() {
+    let directory = TempDir::new().unwrap();
+    import_prompt(
+        directory.path(),
+        "defaults.md",
+        "---\nname: defaults\n---\n\n{{language=rust}}/{{language}}/{{query=a=b}}",
+    );
+
+    pm(directory.path())
+        .args(["get", "defaults"])
+        .assert()
+        .success()
+        .stdout("rust/rust/a=b")
+        .stderr("");
+
+    pm(directory.path())
+        .args(["get", "defaults", "-v", "language=", "-v", "query=override"])
+        .assert()
+        .success()
+        .stdout("//override")
+        .stderr("");
+}
+
 #[cfg(unix)]
 #[test]
 fn exec_renders_stdin_and_variables_and_appends_arguments() {
@@ -447,6 +471,32 @@ fn non_tty_input_fulfills_input_even_when_empty() {
 }
 
 #[test]
+fn piped_input_overrides_its_default_including_when_empty() {
+    let directory = TempDir::new().unwrap();
+    import_prompt(
+        directory.path(),
+        "default-input.md",
+        "---\nname: default-input\n---\n\n{{input=fallback}}",
+    );
+
+    pm(directory.path())
+        .args(["get", "default-input"])
+        .write_stdin("piped")
+        .assert()
+        .success()
+        .stdout("piped")
+        .stderr("");
+
+    pm(directory.path())
+        .args(["get", "default-input"])
+        .write_stdin("")
+        .assert()
+        .success()
+        .stdout("")
+        .stderr("");
+}
+
+#[test]
 fn removed_file_option_is_rejected_and_duplicate_variables_fail() {
     let directory = TempDir::new().unwrap();
     import_prompt(
@@ -533,6 +583,21 @@ fn import_rejects_invalid_template_syntax() {
         .stdout("")
         .stderr(predicate::str::contains(
             "invalid template syntax at line 5, column 1: invalid expression `{{ daily report content }}`",
+        ));
+
+    let conflicting = write_prompt(
+        directory.path(),
+        "conflicting-defaults.md",
+        "---\nname: conflicting-defaults\n---\n\n{{language=rust}}\n{{language=go}}",
+    );
+    pm(directory.path())
+        .args(["import", conflicting.to_str().unwrap()])
+        .assert()
+        .failure()
+        .code(1)
+        .stdout("")
+        .stderr(predicate::str::contains(
+            "invalid template syntax at line 6, column 1: conflicting defaults for variable `language`",
         ));
 }
 
