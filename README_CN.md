@@ -20,7 +20,11 @@ pm list
 # 查看已保存的提示词，通过管道交给 agent 执行
 pm get code-review
 pm get code-review | codex exec -
-codex "$(pm get prompt-name)"
+pm get code-review | claude -p
+codex "$(pm get code-review)"
+pi "$(pm get code-review)"
+pm get code-review | pbcopy # macOS 复制到剪贴板
+
 # 如果设置了“执行方式”（类似 systemd 的 ExecStart），可以直接执行
 pm exec code-review
 

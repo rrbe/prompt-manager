@@ -20,7 +20,11 @@ pm list
 # Print a saved prompt, and pipe it to an agent
 pm get code-review
 pm get code-review | codex exec -
-codex "$(pm get prompt-name)"
+pm get code-review | claude -p
+codex "$(pm get code-review)"
+pi "$(pm get code-review)"
+pm get code-review | pbcopy # copy to clipboard on macOS
+
 # If an execution command is configured (like systemd's ExecStart), run it directly
 pm exec code-review
 
