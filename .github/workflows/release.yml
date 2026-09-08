@@ -43,13 +43,25 @@ jobs:
         include:
           - runner: macos-15
             target: aarch64-apple-darwin
+            platform: apple-arm
           - runner: macos-15-intel
             target: x86_64-apple-darwin
+            platform: apple-intel
           - runner: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
+            platform: linux-intel
           - runner: ubuntu-22.04
             target: aarch64-unknown-linux-gnu
+            platform: linux-arm
             cross: true
+          - runner: windows-2025
+            target: x86_64-pc-windows-msvc
+            platform: windows-intel
+            suffix: .exe
+          - runner: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            platform: windows-arm
+            suffix: .exe
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -71,6 +83,8 @@ jobs:
             libc6-dev-arm64-cross
       - name: Build Natively
         if: ${{ !matrix.cross }}
+        env:
+          RUSTFLAGS: ${{ startsWith(matrix.platform, 'windows') && '-C target-feature=+crt-static' || '' }}
         run: cargo build --locked --release --target "${{ matrix.target }}"
       - name: Build Linux ARM64
         if: matrix.cross
@@ -78,24 +92,31 @@ jobs:
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
           CC_aarch64_unknown_linux_gnu: aarch64-linux-gnu-gcc
         run: cargo build --locked --release --target "${{ matrix.target }}"
-      - name: Package
+      - name: Verify Native Binary
+        if: ${{ !matrix.cross }}
         shell: bash
         run: |
-          package="pm-${RELEASE_TAG}-${{ matrix.target }}"
-          mkdir -p "dist/${package}"
-          cp "target/${{ matrix.target }}/release/pm" "dist/${package}/pm"
-          cp LICENSE README.md "dist/${package}/"
-          tar -C dist -czf "dist/${package}.tar.gz" "${package}"
-          (
-            cd dist
-            shasum -a 256 "${package}.tar.gz" > "${package}.tar.gz.sha256"
-          )
+          version="$("target/${{ matrix.target }}/release/pm${{ matrix.suffix }}" --version)"
+          test "${version}" = "pm ${RELEASE_TAG#v}"
+      - name: Prepare Binary
+        shell: bash
+        run: |
+          binary="pm-${RELEASE_TAG}-${{ matrix.platform }}${{ matrix.suffix }}"
+          mkdir -p dist
+          cp "target/${{ matrix.target }}/release/pm${{ matrix.suffix }}" "dist/${binary}"
+      - name: Generate Checksum
+        shell: python
+        run: |
+          import hashlib
+          from pathlib import Path
+
+          binary = Path("dist/pm-${{ env.RELEASE_TAG }}-${{ matrix.platform }}${{ matrix.suffix }}")
+          digest = hashlib.sha256(binary.read_bytes()).hexdigest()
+          binary.with_name(binary.name + ".sha256").write_text(f"{digest}  {binary.name}\n", encoding="utf-8")
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: pm-${{ matrix.target }}
-          path: |
-            dist/*.tar.gz
-            dist/*.sha256
+          path: dist/*
           if-no-files-found: error
 
   publish:
@@ -139,4 +160,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: gh release create "${RELEASE_TAG}" dist/* --notes-file release-notes.md --verify-tag
+        run: gh release create "${RELEASE_TAG}" dist/* install.sh LICENSE --notes-file release-notes.md --verify-tag

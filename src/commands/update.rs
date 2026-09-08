@@ -44,8 +44,7 @@ impl Updater for GitHubUpdater {
     }
 
     fn install(&self, version: &str) -> Result<String> {
-        let target = self_update::get_target();
-        let asset_name = format!("pm-v{version}-{target}.tar.gz");
+        let asset_name = release_asset(version, self_update::get_target())?;
         let checksum_name = format!("{asset_name}.sha256");
         let expected_asset_name = asset_name.clone();
         let mut builder = base_builder();
@@ -57,7 +56,7 @@ impl Updater for GitHubUpdater {
                     .find(|asset| asset.name() == expected_asset_name)
                     .cloned()
             })
-            .bin_path_in_archive("pm-v{{ version }}-{{ target }}/{{ bin }}")
+            .bin_path_in_archive(format!("pm{}", std::env::consts::EXE_SUFFIX))
             .checksum_from_asset(checksum_name)
             .check_install_path_writable(true)
             .unattended();
@@ -68,6 +67,19 @@ impl Updater for GitHubUpdater {
             .map_err(|error| update_error("install update", error))?;
         Ok(status.version().to_owned())
     }
+}
+
+fn release_asset(version: &str, target: &str) -> Result<String> {
+    let platform = match target {
+        "aarch64-apple-darwin" => "apple-arm",
+        "x86_64-apple-darwin" => "apple-intel",
+        "aarch64-unknown-linux-gnu" => "linux-arm",
+        "x86_64-unknown-linux-gnu" => "linux-intel",
+        "aarch64-pc-windows-msvc" => "windows-arm.exe",
+        "x86_64-pc-windows-msvc" => "windows-intel.exe",
+        _ => return Err(Error::Message(format!("no release binary for {target}"))),
+    };
+    Ok(format!("pm-v{version}-{platform}"))
 }
 
 fn base_builder() -> github::UpdateBuilder {
@@ -130,6 +142,24 @@ mod tests {
     use std::cell::Cell;
 
     use super::*;
+
+    #[test]
+    fn release_assets_use_short_platform_names() {
+        for (target, platform) in [
+            ("aarch64-apple-darwin", "apple-arm"),
+            ("x86_64-apple-darwin", "apple-intel"),
+            ("aarch64-unknown-linux-gnu", "linux-arm"),
+            ("x86_64-unknown-linux-gnu", "linux-intel"),
+            ("aarch64-pc-windows-msvc", "windows-arm.exe"),
+            ("x86_64-pc-windows-msvc", "windows-intel.exe"),
+        ] {
+            assert_eq!(
+                release_asset("1.2.3", target).unwrap(),
+                format!("pm-v1.2.3-{platform}")
+            );
+        }
+        assert!(release_asset("1.2.3", "aarch64-unknown-linux-musl").is_err());
+    }
 
     struct FakeUpdater {
         available: Option<String>,

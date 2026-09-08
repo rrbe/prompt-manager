@@ -18,13 +18,13 @@ A request to release, publish, or `bump version X.Y.Z` authorizes the complete w
 3. Run `make check`, `cargo run --locked -- --version`, and `git diff --check`.
 4. Commit in English with `chore: bump version to X.Y.Z`, push `master`, and wait for the CI run on that exact commit to succeed.
 5. Confirm `vX.Y.Z` still does not exist locally, remotely, or as a GitHub Release. Create an annotated `vX.Y.Z` tag on the version commit and push the tag.
-6. Find the tag-triggered `Release` workflow and wait until it reaches a terminal state. The workflow builds four targets and creates the GitHub Release; starting or queueing the run is not completion.
+6. Find the tag-triggered `Release` workflow and wait until it reaches a terminal state. The workflow builds six targets and creates the GitHub Release; starting or queueing the run is not completion.
 7. Verify all of the following before reporting success:
    - The workflow and every validation, build, and publish job succeeded.
    - The Release is published, non-draft, and non-prerelease.
    - The annotated tag peels to the intended version commit locally and remotely.
-   - Four target archives and their four SHA256 files exist; download them and verify every checksum.
-   - Run the matching downloaded binary on the local architecture and confirm `pm X.Y.Z`.
+   - Six platform binaries (including Windows `.exe` files), their six SHA256 files, `install.sh`, and `LICENSE` exist; download them and verify every binary checksum.
+   - Set execute permission on the matching downloaded binary on macOS/Linux, run it on the local architecture, and confirm `pm X.Y.Z`.
    - `master`, `origin/master`, and the remote branch agree, and the worktree is clean.
 
 Release notes must come from commits between the previous reachable tag and the new tag. Do not rely on PR-derived generated notes because this repository commonly commits directly to `master`.

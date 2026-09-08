@@ -33,6 +33,102 @@ pm edit code-review
 pm rm code-review
 ```
 
+## Installation
+
+### Install Script (macOS / Linux)
+
+Install the latest release. Requires `curl` and either `shasum` or `sha256sum`. The script detects your platform, verifies the binary's SHA256 checksum, and sets its execute permission.
+
+```bash
+curl -fsSL https://github.com/rrbe/prompt-manager/releases/latest/download/install.sh | bash
+```
+
+The default destination is `/usr/local/bin`. To install without administrator permissions, use a user directory and add it to your `PATH`:
+
+```bash
+curl -fsSL https://github.com/rrbe/prompt-manager/releases/latest/download/install.sh | PM_INSTALL_DIR="$HOME/.local/bin" bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+### Download with wget (macOS / Linux)
+
+Choose a version from [Releases](https://github.com/rrbe/prompt-manager/releases) and a platform:
+
+| Platform | Value |
+| --- | --- |
+| macOS, Apple Silicon | `apple-arm` |
+| macOS, Intel | `apple-intel` |
+| Linux, ARM64 | `linux-arm` |
+| Linux, x86_64 (Intel or AMD) | `linux-intel` |
+
+Replace `vX.Y.Z` with the release tag and set `PLATFORM` for your machine:
+
+```bash
+VERSION=vX.Y.Z
+PLATFORM=apple-arm
+BINARY="pm-${VERSION}-${PLATFORM}"
+BASE="https://github.com/rrbe/prompt-manager/releases/download/${VERSION}"
+
+wget "${BASE}/${BINARY}" "${BASE}/${BINARY}.sha256"
+# macOS:
+shasum -a 256 -c "${BINARY}.sha256"
+# Linux: use sha256sum -c "${BINARY}.sha256" instead
+```
+
+After the checksum reports `OK`, install:
+
+```bash
+mkdir -p "$HOME/.local/bin"
+install -m 0755 "$BINARY" "$HOME/.local/bin/pm"
+export PATH="$HOME/.local/bin:$PATH"
+pm --version
+```
+
+To install system-wide, use `sudo install -m 0755 "$BINARY" /usr/local/bin/pm` instead.
+
+### Windows
+
+Download `pm-vX.Y.Z-windows-intel.exe` for x86_64 (Intel or AMD), or `pm-vX.Y.Z-windows-arm.exe` for ARM64. For example, in PowerShell, replace `vX.Y.Z` with the release tag and choose your platform:
+
+```powershell
+$ErrorActionPreference = "Stop"
+$Version = "vX.Y.Z"
+$Platform = "windows-intel" # Use windows-arm for ARM64
+$Binary = "pm-$Version-$Platform.exe"
+$Base = "https://github.com/rrbe/prompt-manager/releases/download/$Version"
+Invoke-WebRequest "$Base/$Binary" -OutFile $Binary
+Invoke-WebRequest "$Base/$Binary.sha256" -OutFile "$Binary.sha256"
+if ((Get-FileHash $Binary -Algorithm SHA256).Hash -ne (Get-Content "$Binary.sha256").Split()[0]) {
+    throw "SHA256 checksum mismatch"
+}
+$InstallDir = "$env:LOCALAPPDATA\Programs\pm"
+New-Item -ItemType Directory -Force $InstallDir | Out-Null
+Move-Item $Binary "$InstallDir\pm.exe" -Force
+$env:Path = "$InstallDir;$env:Path"
+pm --version
+```
+
+Add `%LOCALAPPDATA%\Programs\pm` to your user `Path` environment variable to use `pm` in future terminals. Interactive editing uses Notepad by default; set `VISUAL` or `EDITOR` to use another editor, such as `code --wait`.
+
+The installation script and platform binaries are available starting with releases after v0.7.0. Users of v0.7.0 and earlier must reinstall once using these instructions because their `pm update` expects the previous asset names.
+
+### Build from Source
+
+With Rust installed:
+
+```bash
+cargo install --git https://github.com/rrbe/prompt-manager --locked
+```
+
+From a local checkout:
+
+```bash
+cargo install --path . --locked               # Install to Cargo's bin directory
+# macOS / Linux:
+make install                                  # Install to /usr/local/bin by default
+make install INSTALL_DIR="$HOME/.local/bin"   # Install to a user directory
+```
+
 ## Prompt Structure
 
 A prompt is Markdown with YAML front matter:
@@ -193,15 +289,7 @@ pm update --check
 
 ### 9. Data Storage
 
-The database is stored at `$HOME/.local/share/pm/pm.db` by default. When `XDG_DATA_HOME` is set, `$XDG_DATA_HOME/pm/pm.db` is used instead.
-
-## Installation
-
-```bash
-make install                                  # Install to /usr/local/bin by default
-make install INSTALL_DIR="$HOME/.local/bin"   # Install to a user directory
-cargo install --path .                        # Install to ~/.cargo/bin
-```
+The database defaults to `$HOME/.local/share/pm/pm.db` on macOS/Linux and `%LOCALAPPDATA%\pm\pm.db` on Windows. When `XDG_DATA_HOME` is set, `pm/pm.db` under that directory is used instead.
 
 ## Development
 

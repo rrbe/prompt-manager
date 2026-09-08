@@ -5,19 +5,36 @@ use crate::error::{Error, Result};
 pub fn database_path() -> Result<PathBuf> {
     let data_home = match env::var_os("XDG_DATA_HOME").filter(|value| !value.is_empty()) {
         Some(path) => PathBuf::from(path),
-        None => {
-            let home = env::var_os("HOME")
-                .filter(|value| !value.is_empty())
-                .ok_or_else(|| {
-                    Error::Message(
-                        "cannot determine data directory: XDG_DATA_HOME and HOME are unset".into(),
-                    )
-                })?;
-            PathBuf::from(home).join(".local/share")
-        }
+        None => default_data_home()?,
     };
 
     Ok(data_home.join("pm/pm.db"))
+}
+
+fn default_data_home() -> Result<PathBuf> {
+    #[cfg(windows)]
+    {
+        env::var_os("LOCALAPPDATA")
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from)
+            .ok_or_else(|| {
+                Error::Message(
+                    "cannot determine data directory: XDG_DATA_HOME and LOCALAPPDATA are unset"
+                        .into(),
+                )
+            })
+    }
+    #[cfg(not(windows))]
+    {
+        let home = env::var_os("HOME")
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                Error::Message(
+                    "cannot determine data directory: XDG_DATA_HOME and HOME are unset".into(),
+                )
+            })?;
+        Ok(PathBuf::from(home).join(".local/share"))
+    }
 }
 
 #[cfg(test)]

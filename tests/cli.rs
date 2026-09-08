@@ -19,6 +19,41 @@ fn write_prompt(directory: &Path, file_name: &str, markdown: &str) -> std::path:
     path
 }
 
+#[test]
+fn uses_platform_data_directory_when_xdg_is_unset() {
+    let directory = TempDir::new().unwrap();
+    let mut command = pm(directory.path());
+    command.env_remove("XDG_DATA_HOME");
+    #[cfg(windows)]
+    command
+        .env("LOCALAPPDATA", directory.path())
+        .env_remove("HOME");
+    #[cfg(not(windows))]
+    command.env("HOME", directory.path());
+    command.args(["list", "--quiet"]).assert().success();
+
+    #[cfg(windows)]
+    let expected = directory.path().join("pm/pm.db");
+    #[cfg(not(windows))]
+    let expected = directory.path().join(".local/share/pm/pm.db");
+    assert!(expected.is_file());
+}
+
+#[test]
+fn xdg_data_directory_overrides_platform_default() {
+    let directory = TempDir::new().unwrap();
+    let xdg = directory.path().join("xdg");
+    let platform = directory.path().join("platform");
+    pm(&xdg)
+        .env("HOME", &platform)
+        .env("LOCALAPPDATA", &platform)
+        .args(["list", "--quiet"])
+        .assert()
+        .success();
+    assert!(xdg.join("pm/pm.db").is_file());
+    assert!(!platform.exists());
+}
+
 fn import_prompt(data_home: &Path, file_name: &str, markdown: &str) {
     let path = write_prompt(data_home, file_name, markdown);
     pm(data_home)

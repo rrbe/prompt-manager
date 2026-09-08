@@ -77,15 +77,20 @@ fn editor_stdin() -> Stdio {
 }
 
 fn editor_command() -> Result<Vec<String>> {
-    let value = env::var("VISUAL")
-        .ok()
+    parse_editor_command(env::var("VISUAL").ok(), env::var("EDITOR").ok())
+}
+
+fn parse_editor_command(visual: Option<String>, editor: Option<String>) -> Result<Vec<String>> {
+    let value = visual
         .filter(|value| !value.trim().is_empty())
-        .or_else(|| {
-            env::var("EDITOR")
-                .ok()
-                .filter(|value| !value.trim().is_empty())
-        })
-        .unwrap_or_else(|| "vi".into());
+        .or_else(|| editor.filter(|value| !value.trim().is_empty()))
+        .unwrap_or_else(|| {
+            if cfg!(windows) {
+                "notepad".into()
+            } else {
+                "vi".into()
+            }
+        });
     shell_words::split(&value)
         .map_err(|error| Error::Message(format!("invalid editor command: {error}")))
 }
@@ -123,6 +128,23 @@ fn confirm_retry(validation_error: &Error) -> Result<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn uses_platform_editor_unless_configured() {
+        assert_eq!(
+            parse_editor_command(Some("code --wait".into()), Some("vim".into())).unwrap(),
+            ["code", "--wait"]
+        );
+        assert_eq!(
+            parse_editor_command(Some(" ".into()), Some("vim".into())).unwrap(),
+            ["vim"]
+        );
+        let default = parse_editor_command(None, None).unwrap();
+        #[cfg(windows)]
+        assert_eq!(default, ["notepad"]);
+        #[cfg(not(windows))]
+        assert_eq!(default, ["vi"]);
+    }
 
     #[test]
     fn parses_an_editor_with_arguments() {
