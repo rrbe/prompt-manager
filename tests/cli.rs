@@ -189,7 +189,7 @@ fn add_skips_empty_or_whitespace_only_bodies() {
                 .assert()
                 .success()
                 .stdout("")
-                .stderr("");
+                .stderr("Prompt 'empty' was not created: content is empty.\n");
 
             pm(directory.path())
                 .args(["get", "empty"])

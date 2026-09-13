@@ -40,6 +40,10 @@ pub fn run(arguments: AddArgs, database: &mut Database) -> Result<()> {
         editor::edit_until_valid(&initial, markdown::parse)?
     };
     if document.content.trim().is_empty() {
+        eprintln!(
+            "Prompt '{}' was not created: content is empty.",
+            document.name
+        );
         return Ok(());
     }
     database.create_prompt(&document_to_input(document))
