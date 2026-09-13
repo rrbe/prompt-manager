@@ -165,23 +165,40 @@ fn add_no_edit_saves_stdin_without_opening_the_editor() {
         .success()
         .stdout("direct body\n")
         .stderr("");
+}
 
-    pm(directory.path())
-        .env("VISUAL", &editor)
-        .env("EDITOR_MARKER", &marker)
-        .args(["add", "empty", "--no-edit"])
-        .assert()
-        .success()
-        .stdout("")
-        .stderr("");
-    assert!(!marker.exists());
+#[cfg(unix)]
+#[test]
+fn add_skips_empty_or_whitespace_only_bodies() {
+    use std::os::unix::fs::PermissionsExt;
 
-    pm(directory.path())
-        .args(["get", "empty"])
-        .assert()
-        .success()
-        .stdout("")
-        .stderr("");
+    let directory = TempDir::new().unwrap();
+    let editor = directory.path().join("editor.sh");
+    fs::write(&editor, "#!/bin/sh\nexit 0\n").unwrap();
+    fs::set_permissions(&editor, fs::Permissions::from_mode(0o700)).unwrap();
+
+    for no_edit in [false, true] {
+        for body in ["", " \t\n\n"] {
+            let mut command = pm(directory.path());
+            command.env("VISUAL", &editor).args(["add", "empty"]);
+            if no_edit {
+                command.arg("--no-edit");
+            }
+            command
+                .write_stdin(body)
+                .assert()
+                .success()
+                .stdout("")
+                .stderr("");
+
+            pm(directory.path())
+                .args(["get", "empty"])
+                .assert()
+                .failure()
+                .stdout("")
+                .stderr(predicate::str::contains("prompt not found: empty"));
+        }
+    }
 }
 
 #[test]
