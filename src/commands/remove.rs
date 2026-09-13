@@ -1,31 +1,22 @@
-use std::io::{self, IsTerminal, Write};
+use std::io::{self, Write};
 
-use crate::{
-    cli::RemoveArgs,
-    db::Database,
-    error::{Error, Result},
-    prompt::validate_name,
-};
+use crate::{cli::RemoveArgs, db::Database, error::Result, prompt::validate_name};
 
 pub fn run(arguments: RemoveArgs, database: &mut Database) -> Result<()> {
-    validate_name(&arguments.name)?;
-    // Resolve the target before asking for destructive confirmation.
-    database.get_prompt(&arguments.name)?;
+    for name in &arguments.names {
+        validate_name(name)?;
+        // Resolve the target before asking for destructive confirmation.
+        database.get_prompt(name)?;
 
-    if !arguments.force && !confirm(&arguments.name)? {
-        return Ok(());
+        if arguments.force || confirm(name)? {
+            database.delete_prompt(name)?;
+        }
     }
-    database.delete_prompt(&arguments.name)
+    Ok(())
 }
 
 fn confirm(name: &str) -> Result<bool> {
     let stdin = io::stdin();
-    if !stdin.is_terminal() {
-        return Err(Error::Message(
-            "refusing to prompt for confirmation without a TTY; use --force".into(),
-        ));
-    }
-
     let stderr = io::stderr();
     let mut error_output = stderr.lock();
     write!(error_output, "Remove prompt '{name}'? [y/N] ")?;

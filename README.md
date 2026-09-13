@@ -31,7 +31,17 @@ pm exec code-review
 # Edit / remove a prompt
 pm edit code-review
 pm rm code-review
+
+# Remove multiple prompts (confirm each, pipe confirmations, or skip confirmation)
+pm rm code-review daily-report
+yes | pm rm code-review daily-report
+pm rm code-review daily-report --force
 ```
+
+`pm rm` reads one confirmation line per prompt from stdin. Only `y` or `yes`
+(case-insensitive) confirms deletion; other responses or end-of-input keep the
+prompt. Targets are processed in order; an error stops the command, and earlier
+deletions remain applied.
 
 ## Installation
 

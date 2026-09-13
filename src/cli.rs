@@ -25,7 +25,7 @@ pub enum Command {
     Add(AddArgs),
     /// Edit an existing prompt using an external editor.
     Edit(NameArgs),
-    /// Remove a prompt.
+    /// Remove one or more prompts.
     #[command(visible_alias = "remove")]
     Rm(RemoveArgs),
     /// Get a prompt with variables and piped input.
@@ -80,8 +80,8 @@ pub struct AddArgs {
 
 #[derive(Debug, Args)]
 pub struct RemoveArgs {
-    #[arg(add = ArgValueCompleter::new(prompt_name_completer))]
-    pub name: String,
+    #[arg(required = true, num_args = 1.., value_name = "NAME", add = ArgValueCompleter::new(prompt_name_completer))]
+    pub names: Vec<String>,
 
     /// Remove without confirmation.
     #[arg(long)]

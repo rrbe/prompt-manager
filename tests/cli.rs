@@ -1183,7 +1183,7 @@ fn get_pick_reports_a_missing_fzf() {
 }
 
 #[test]
-fn missing_prompt_and_unforced_non_tty_remove_fail_cleanly() {
+fn missing_prompt_fails_and_remove_without_input_keeps_prompt() {
     let directory = TempDir::new().unwrap();
     pm(directory.path())
         .args(["get", "does-not-exist"])
@@ -1200,17 +1200,116 @@ fn missing_prompt_and_unforced_non_tty_remove_fail_cleanly() {
     );
     pm(directory.path())
         .args(["rm", "remove-me"])
+        .write_stdin("")
         .assert()
-        .failure()
-        .code(1)
+        .success()
         .stdout("")
-        .stderr(predicate::str::contains("use --force"));
+        .stderr("Remove prompt 'remove-me'? [y/N] ");
     pm(directory.path())
         .args(["get", "remove-me"])
         .assert()
         .success()
         .stdout("body")
         .stderr("");
+}
+
+#[test]
+fn removes_multiple_prompts_with_force() {
+    let directory = TempDir::new().unwrap();
+    for name in ["first", "second"] {
+        import_prompt(
+            directory.path(),
+            &format!("{name}.md"),
+            &format!("---\nname: {name}\n---\n\nbody"),
+        );
+    }
+    pm(directory.path())
+        .args(["rm", "first", "second", "--force"])
+        .assert()
+        .success()
+        .stdout("")
+        .stderr("");
+    pm(directory.path())
+        .args(["list", "--quiet"])
+        .assert()
+        .success()
+        .stdout("");
+}
+
+#[test]
+fn remove_reads_each_piped_confirmation_and_keeps_declined_or_unanswered_prompts() {
+    let directory = TempDir::new().unwrap();
+    for name in ["first", "second", "third", "fourth"] {
+        import_prompt(
+            directory.path(),
+            &format!("{name}.md"),
+            &format!("---\nname: {name}\n---\n\nbody"),
+        );
+    }
+    pm(directory.path())
+        .args(["rm", "first", "second", "third", "fourth"])
+        .write_stdin("y\nn\nYES\n")
+        .assert().success().stdout("")
+        .stderr("Remove prompt 'first'? [y/N] Remove prompt 'second'? [y/N] Remove prompt 'third'? [y/N] Remove prompt 'fourth'? [y/N] ");
+    for name in ["first", "third"] {
+        pm(directory.path())
+            .args(["get", name])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains(format!(
+                "prompt not found: {name}"
+            )));
+    }
+    for name in ["second", "fourth"] {
+        pm(directory.path())
+            .args(["get", name])
+            .assert()
+            .success()
+            .stdout("body");
+    }
+}
+
+#[test]
+fn remove_stops_at_missing_target_without_undoing_prior_deletions() {
+    let directory = TempDir::new().unwrap();
+    for name in ["first", "last"] {
+        import_prompt(
+            directory.path(),
+            &format!("{name}.md"),
+            &format!("---\nname: {name}\n---\n\nbody"),
+        );
+    }
+    pm(directory.path())
+        .args(["rm", "first", "missing", "last"])
+        .write_stdin("yes\nyes\nyes\n")
+        .assert()
+        .failure()
+        .stdout("")
+        .stderr(
+            predicate::str::contains("prompt not found: missing")
+                .and(predicate::str::contains("Remove prompt 'missing'").not())
+                .and(predicate::str::contains("Remove prompt 'last'").not()),
+        );
+    pm(directory.path())
+        .args(["get", "first"])
+        .assert()
+        .failure();
+    pm(directory.path())
+        .args(["get", "last"])
+        .assert()
+        .success()
+        .stdout("body");
+}
+
+#[test]
+fn remove_requires_at_least_one_name() {
+    let directory = TempDir::new().unwrap();
+    pm(directory.path())
+        .arg("rm")
+        .assert()
+        .failure()
+        .code(2)
+        .stderr(predicate::str::contains("<NAME>..."));
 }
 
 #[test]
