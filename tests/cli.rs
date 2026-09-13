@@ -652,19 +652,6 @@ fn import_rejects_invalid_exec_commands() {
         .stdout("")
         .stderr(predicate::str::contains("exec command must not be empty"));
 
-    let null = write_prompt(
-        directory.path(),
-        "null-exec.md",
-        "---\nname: null-exec\nexec:\n---\n\nbody",
-    );
-    pm(directory.path())
-        .args(["import", null.to_str().unwrap()])
-        .assert()
-        .failure()
-        .code(1)
-        .stdout("")
-        .stderr(predicate::str::contains("exec command must not be empty"));
-
     let invalid = write_prompt(
         directory.path(),
         "invalid-exec.md",
@@ -1237,6 +1224,36 @@ fn remove_alias_is_visible_and_removes_a_prompt() {
         .code(1)
         .stdout("")
         .stderr(predicate::str::contains("prompt not found: remove-alias"));
+}
+
+#[cfg(unix)]
+#[test]
+fn add_opens_a_document_with_commented_optional_fields() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let directory = TempDir::new().unwrap();
+    let snapshot = directory.path().join("initial.md");
+    let editor = directory.path().join("editor.sh");
+    fs::write(&editor, "#!/bin/sh\ncp \"$1\" \"$EDITOR_SNAPSHOT\"\n").unwrap();
+    fs::set_permissions(&editor, fs::Permissions::from_mode(0o700)).unwrap();
+
+    pm(directory.path())
+        .env("VISUAL", &editor)
+        .env("EDITOR_SNAPSHOT", &snapshot)
+        .args(["add", "review"])
+        .write_stdin("Review {{input}}")
+        .assert()
+        .success()
+        .stdout("");
+    assert_eq!(
+        fs::read_to_string(snapshot).unwrap(),
+        "---\n# name: required unique name. Other fields are optional.\n# description: short description.\n# tags: YAML list, for example:\n# tags:\n#   - coding\n#   - review\n# exec: command, e.g. codex exec -.\n# Enter the prompt body below the closing --- delimiter.\n\nname: review\ndescription:\ntags:\nexec:\n---\n\nReview {{input}}"
+    );
+    pm(directory.path())
+        .args(["get", "review", "-v", "input=code"])
+        .assert()
+        .success()
+        .stdout("Review code");
 }
 
 #[cfg(unix)]

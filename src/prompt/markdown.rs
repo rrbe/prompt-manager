@@ -20,23 +20,21 @@ struct Metadata {
     name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     description: Option<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    tags: Vec<String>,
     #[serde(
         default,
-        skip_serializing_if = "Option::is_none",
-        deserialize_with = "deserialize_optional_exec"
+        skip_serializing_if = "Vec::is_empty",
+        deserialize_with = "deserialize_optional_tags"
     )]
+    tags: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     exec: Option<String>,
 }
 
-fn deserialize_optional_exec<'de, D>(
-    deserializer: D,
-) -> std::result::Result<Option<String>, D::Error>
+fn deserialize_optional_tags<'de, D>(deserializer: D) -> std::result::Result<Vec<String>, D::Error>
 where
     D: Deserializer<'de>,
 {
-    String::deserialize(deserializer).map(Some)
+    Ok(Option::<Vec<String>>::deserialize(deserializer)?.unwrap_or_default())
 }
 
 pub fn parse(source: &str) -> Result<PromptDocument> {
@@ -173,7 +171,18 @@ mod tests {
     fn rejects_invalid_exec_commands() {
         assert!(parse("---\nname: test\nexec: '  '\n---\n\nbody").is_err());
         assert!(parse("---\nname: test\nexec: \"codex '\"\n---\n\nbody").is_err());
-        assert!(parse("---\nname: test\nexec:\n---\n\nbody").is_err());
+    }
+
+    #[test]
+    fn accepts_blank_optional_metadata() {
+        let document = parse(
+            "---\nname: test\ndescription: # Optional description\ntags: # Optional list\nexec: # Optional command\n---\n\nbody",
+        )
+        .unwrap();
+        assert_eq!(document.description, None);
+        assert!(document.tags.is_empty());
+        assert_eq!(document.exec, None);
+        assert_eq!(document.content, "body");
     }
 
     #[test]
