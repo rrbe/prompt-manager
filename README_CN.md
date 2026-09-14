@@ -50,68 +50,6 @@ curl -fsSL https://github.com/rrbe/prompt-manager/releases/latest/download/insta
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-### 使用 wget 下载（macOS / Linux）
-
-从 [Releases](https://github.com/rrbe/prompt-manager/releases) 选择版本，并选择对应平台：
-
-| 平台 | 值 |
-| --- | --- |
-| macOS，Apple Silicon | `apple-arm` |
-| macOS，Intel | `apple-intel` |
-| Linux，ARM64 | `linux-arm` |
-| Linux，x86_64（Intel 或 AMD） | `linux-intel` |
-
-将 `vX.Y.Z` 替换为发布标签，并根据机器设置 `PLATFORM`：
-
-```bash
-VERSION=vX.Y.Z
-PLATFORM=apple-arm
-BINARY="pm-${VERSION}-${PLATFORM}"
-BASE="https://github.com/rrbe/prompt-manager/releases/download/${VERSION}"
-
-wget "${BASE}/${BINARY}" "${BASE}/${BINARY}.sha256"
-# macOS：
-shasum -a 256 -c "${BINARY}.sha256"
-# Linux：改用 sha256sum -c "${BINARY}.sha256"
-```
-
-确认校验结果为 `OK` 后安装：
-
-```bash
-mkdir -p "$HOME/.local/bin"
-install -m 0755 "$BINARY" "$HOME/.local/bin/pm"
-export PATH="$HOME/.local/bin:$PATH"
-pm --version
-```
-
-安装到系统目录时，将安装命令改为 `sudo install -m 0755 "$BINARY" /usr/local/bin/pm`。
-
-### Windows
-
-x86_64（Intel 或 AMD）下载 `pm-vX.Y.Z-windows-intel.exe`，ARM64 下载 `pm-vX.Y.Z-windows-arm.exe`。例如在 PowerShell 中，将 `vX.Y.Z` 替换为发布标签并选择平台：
-
-```powershell
-$ErrorActionPreference = "Stop"
-$Version = "vX.Y.Z"
-$Platform = "windows-intel" # ARM64 使用 windows-arm
-$Binary = "pm-$Version-$Platform.exe"
-$Base = "https://github.com/rrbe/prompt-manager/releases/download/$Version"
-Invoke-WebRequest "$Base/$Binary" -OutFile $Binary
-Invoke-WebRequest "$Base/$Binary.sha256" -OutFile "$Binary.sha256"
-if ((Get-FileHash $Binary -Algorithm SHA256).Hash -ne (Get-Content "$Binary.sha256").Split()[0]) {
-    throw "SHA256 checksum mismatch"
-}
-$InstallDir = "$env:LOCALAPPDATA\Programs\pm"
-New-Item -ItemType Directory -Force $InstallDir | Out-Null
-Move-Item $Binary "$InstallDir\pm.exe" -Force
-$env:Path = "$InstallDir;$env:Path"
-pm --version
-```
-
-将 `%LOCALAPPDATA%\Programs\pm` 加入用户环境变量 `Path`，即可在之后打开的终端中使用 `pm`。交互编辑默认使用记事本；可通过 `VISUAL` 或 `EDITOR` 设置其他编辑器，例如 `code --wait`。
-
-安装脚本和各平台二进制文件从 v0.7.0 之后的版本开始提供。v0.7.0 及更早版本的 `pm update` 使用旧文件名，需要按上述方式重新安装一次。
-
 ### 从源码安装
 
 安装 Rust 后执行：
