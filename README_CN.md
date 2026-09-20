@@ -121,7 +121,7 @@ pm get system-check \
   -v time=1h
 ```
 
-也可以使用 `-i` 交互式逐一填写缺失的变量。值可以跨多行；每输入完一个值后，输入一行 `EOF` 结束该值，或按 <Ctrl>-D。提示会输出到 stderr，渲染后的结果输出到 stdout：
+也可以使用 `-i` 交互式逐一填写未通过 `-v` 指定的变量，包括有默认值的变量。值可以跨多行；每输入完一个值后，输入一行 `EOF` 结束该值，或按 <Ctrl>-D。提示会输出到 stderr，渲染后的结果输出到 stdout：
 
 ```bash
 pm get system-check -i

@@ -126,7 +126,7 @@ pub struct PromptArgs {
     #[arg(short = 'v', long = "var", value_name = "KEY=VALUE")]
     pub variables: Vec<VariableAssignment>,
 
-    /// Prompt for each missing variable using a multiline terminal form.
+    /// Prompt for each variable not set by -v, including variables with defaults.
     #[arg(short, long)]
     pub interactive: bool,
 }

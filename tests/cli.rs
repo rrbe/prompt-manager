@@ -484,6 +484,26 @@ fn interactive_get_prompts_for_missing_variables_and_keeps_stdout_clean() {
 }
 
 #[test]
+fn interactive_get_prompts_before_applying_defaults() {
+    let directory = TempDir::new().unwrap();
+    import_prompt(
+        directory.path(),
+        "interactive-defaults.md",
+        "---\nname: interactive-defaults\n---\n\n{{provided=fallback}}/{{language}}/{{language=rust}}/{{input=fallback}}",
+    );
+
+    pm(directory.path())
+        .args(["get", "interactive-defaults", "-i", "-v", "provided=fixed"])
+        .write_stdin("go\nEOF\nEOF\n")
+        .assert()
+        .success()
+        .stdout("fixed/go/go/")
+        .stderr(
+            "[1/2] language\nEnter or paste the value. Finish with a line containing only `EOF`, or press Ctrl-D on an empty line.\n[2/2] input\nEnter or paste the value. Finish with a line containing only `EOF`, or press Ctrl-D on an empty line.\n",
+        );
+}
+
+#[test]
 fn interactive_get_fails_without_a_completed_value() {
     let directory = TempDir::new().unwrap();
     import_prompt(

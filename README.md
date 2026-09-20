@@ -131,7 +131,7 @@ pm get system-check \
   -v time=1h
 ```
 
-Use `-i` to fill in missing variables interactively, one at a time. Values may span multiple lines; after entering each value, enter a line with `EOF` to finish it, or press <Ctrl>-D. Prompts are written to stderr, and the rendered result is written to stdout:
+Use `-i` to fill in variables not supplied with `-v` interactively, one at a time, including variables with defaults. Values may span multiple lines; after entering each value, enter a line with `EOF` to finish it, or press <Ctrl>-D. Prompts are written to stderr, and the rendered result is written to stdout:
 
 ```bash
 pm get system-check -i

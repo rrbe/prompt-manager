@@ -171,17 +171,9 @@ fn prompt_for_variables(
     eof_finishes_value: bool,
 ) -> Result<()> {
     let placeholders = template::placeholders(content);
-    let defaulted_names: Vec<&str> = placeholders
-        .iter()
-        .filter(|placeholder| placeholder.default.is_some())
-        .map(|placeholder| placeholder.name.as_str())
-        .collect();
     let mut names = Vec::new();
     for placeholder in &placeholders {
-        if !values.contains_key(&placeholder.name)
-            && !defaulted_names.contains(&placeholder.name.as_str())
-            && !names.contains(&placeholder.name)
-        {
+        if !values.contains_key(&placeholder.name) && !names.contains(&placeholder.name) {
             names.push(placeholder.name.clone());
         }
     }
@@ -235,19 +227,19 @@ mod tests {
         prompt_for_variables(
             "{{provided}} {{defaulted}} {{defaulted=fallback}} {{first}} {{second}} {{first}}",
             &mut values,
-            &b"one\nEOF\ntwo\nlines\nEOF\n"[..],
+            &b"custom\nEOF\none\nEOF\ntwo\nlines\nEOF\n"[..],
             &mut output,
             false,
         )
         .unwrap();
 
         assert_eq!(values["provided"], "existing");
-        assert!(!values.contains_key("defaulted"));
+        assert_eq!(values["defaulted"], "custom");
         assert_eq!(values["first"], "one");
         assert_eq!(values["second"], "two\nlines");
         assert_eq!(
             String::from_utf8(output).unwrap(),
-            "[1/2] first\nEnter or paste the value. Finish with a line containing only `EOF`, or press Ctrl-D on an empty line.\n[2/2] second\nEnter or paste the value. Finish with a line containing only `EOF`, or press Ctrl-D on an empty line.\n"
+            "[1/3] defaulted\nEnter or paste the value. Finish with a line containing only `EOF`, or press Ctrl-D on an empty line.\n[2/3] first\nEnter or paste the value. Finish with a line containing only `EOF`, or press Ctrl-D on an empty line.\n[3/3] second\nEnter or paste the value. Finish with a line containing only `EOF`, or press Ctrl-D on an empty line.\n"
         );
     }
 
