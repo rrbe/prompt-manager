@@ -213,7 +213,7 @@ fn add_no_edit_validates_the_prompt_body() {
         .code(1)
         .stdout("")
         .stderr(predicate::str::contains(
-            "invalid template syntax at line 5, column 1: invalid expression `{{ daily report content }}`",
+            "invalid template syntax at line 17, column 1: invalid expression `{{ daily report content }}`",
         ));
 }
 
@@ -1489,6 +1489,36 @@ fn edit_uses_an_external_editor_and_protects_the_original_on_failure() {
         .assert()
         .success()
         .stdout("first body");
+}
+
+#[cfg(unix)]
+#[test]
+fn edit_opens_the_same_document_structure_as_add() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let directory = TempDir::new().unwrap();
+    import_prompt(
+        directory.path(),
+        "created.md",
+        "---\nname: created\n---\n\nfirst body",
+    );
+    let snapshot = directory.path().join("initial.md");
+    let editor = directory.path().join("editor.sh");
+    fs::write(&editor, "#!/bin/sh\ncp \"$1\" \"$EDITOR_SNAPSHOT\"\n").unwrap();
+    fs::set_permissions(&editor, fs::Permissions::from_mode(0o700)).unwrap();
+
+    pm(directory.path())
+        .env("VISUAL", &editor)
+        .env("EDITOR_SNAPSHOT", &snapshot)
+        .args(["edit", "created"])
+        .assert()
+        .success()
+        .stdout("")
+        .stderr("");
+    assert_eq!(
+        fs::read_to_string(snapshot).unwrap(),
+        "---\n# name: required unique name. Other fields are optional.\n# description: short description.\n# tags: YAML list, for example:\n# tags:\n#   - coding\n#   - review\n# exec: command, e.g. codex exec -.\n# Enter the prompt body below the closing --- delimiter.\n\nname: created\ndescription:\ntags:\nexec:\n---\n\nfirst body"
+    );
 }
 
 #[test]

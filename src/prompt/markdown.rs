@@ -18,17 +18,22 @@ pub struct PromptDocument {
 #[serde(deny_unknown_fields)]
 struct Metadata {
     name: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     description: Option<String>,
-    #[serde(
-        default,
-        skip_serializing_if = "Vec::is_empty",
-        deserialize_with = "deserialize_optional_tags"
-    )]
+    #[serde(default, deserialize_with = "deserialize_optional_tags")]
     tags: Vec<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     exec: Option<String>,
 }
+
+const FIELD_HELP: &str = "# name: required unique name. Other fields are optional.\n\
+# description: short description.\n\
+# tags: YAML list, for example:\n\
+# tags:\n\
+#   - coding\n\
+#   - review\n\
+# exec: command, e.g. codex exec -.\n\
+# Enter the prompt body below the closing --- delimiter.";
 
 fn deserialize_optional_tags<'de, D>(deserializer: D) -> std::result::Result<Vec<String>, D::Error>
 where
@@ -72,8 +77,14 @@ pub fn export(document: &PromptDocument) -> Result<String> {
         tags: normalize_tags(document.tags.clone())?,
         exec: document.exec.clone(),
     };
-    let yaml = serde_yaml::to_string(&metadata)?;
-    Ok(format!("---\n{yaml}---\n\n{}", document.content))
+    let yaml = serde_yaml::to_string(&metadata)?
+        .replace("description: null\n", "description:\n")
+        .replace("tags: []\n", "tags:\n")
+        .replace("exec: null\n", "exec:\n");
+    Ok(format!(
+        "---\n{FIELD_HELP}\n\n{yaml}---\n\n{}",
+        document.content
+    ))
 }
 
 fn split_front_matter(source: &str) -> Result<(&str, &str)> {
@@ -153,6 +164,22 @@ mod tests {
                 tags: vec!["a".into(), "z".into()],
                 ..document
             }
+        );
+    }
+
+    #[test]
+    fn export_includes_field_help_and_blank_optional_fields() {
+        let document = PromptDocument {
+            name: "test".into(),
+            description: None,
+            tags: Vec::new(),
+            exec: None,
+            content: "body".into(),
+        };
+
+        assert_eq!(
+            export(&document).unwrap(),
+            "---\n# name: required unique name. Other fields are optional.\n# description: short description.\n# tags: YAML list, for example:\n# tags:\n#   - coding\n#   - review\n# exec: command, e.g. codex exec -.\n# Enter the prompt body below the closing --- delimiter.\n\nname: test\ndescription:\ntags:\nexec:\n---\n\nbody"
         );
     }
 

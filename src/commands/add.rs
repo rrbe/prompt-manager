@@ -31,12 +31,6 @@ pub fn run(arguments: AddArgs, database: &mut Database) -> Result<()> {
     let document = if arguments.no_edit {
         markdown::parse(&initial)?
     } else {
-        let name = serde_yaml::to_string(&document.name)?;
-        let initial = format!(
-            "---\n# name: required unique name. Other fields are optional.\n# description: short description.\n# tags: YAML list, for example:\n# tags:\n#   - coding\n#   - review\n# exec: command, e.g. codex exec -.\n# Enter the prompt body below the closing --- delimiter.\n\nname: {}\ndescription:\ntags:\nexec:\n---\n\n{}",
-            name.trim_end(),
-            document.content,
-        );
         editor::edit_until_valid(&initial, markdown::parse)?
     };
     if document.content.trim().is_empty() {
