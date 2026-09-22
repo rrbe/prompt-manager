@@ -26,14 +26,7 @@ struct Metadata {
     exec: Option<String>,
 }
 
-const FIELD_HELP: &str = "# name: required unique name. Other fields are optional.\n\
-# description: short description.\n\
-# tags: YAML list, for example:\n\
-# tags:\n\
-#   - coding\n\
-#   - review\n\
-# exec: command, e.g. codex exec -.\n\
-# Enter the prompt body below the closing --- delimiter.";
+const FIELD_HELP_COLUMN: usize = 20;
 const CONTENT_PLACEHOLDER: &str = "<!-- Enter prompt content here. -->";
 
 fn deserialize_optional_tags<'de, D>(deserializer: D) -> std::result::Result<Vec<String>, D::Error>
@@ -80,12 +73,39 @@ pub fn export(document: &PromptDocument) -> Result<String> {
     };
     let yaml = serde_yaml::to_string(&metadata)?
         .replace("description: null\n", "description:\n")
-        .replace("tags: []\n", "tags:\n")
         .replace("exec: null\n", "exec:\n");
-    Ok(format!(
-        "---\n{FIELD_HELP}\n\n{yaml}---\n\n{}",
-        document.content
-    ))
+    let yaml = add_field_help(&yaml);
+    Ok(format!("---\n{yaml}---\n\n{}", document.content))
+}
+
+fn add_field_help(yaml: &str) -> String {
+    let mut output = String::new();
+    for line in yaml.lines() {
+        let (line, help, show_tag_examples) = match line {
+            line if line.starts_with("name:") => (line, Some("required, unique"), false),
+            line if line.starts_with("description:") => {
+                (line, Some("optional, short description"), false)
+            }
+            "tags: []" => ("tags:", Some("optional, YAML list"), true),
+            "tags:" => (line, Some("optional, YAML list"), false),
+            line if line.starts_with("exec:") => (line, Some("optional, e.g. codex exec -"), false),
+            _ => (line, None, false),
+        };
+        output.push_str(line);
+        if let Some(help) = help {
+            let padding = FIELD_HELP_COLUMN
+                .saturating_sub(line.chars().count())
+                .max(2);
+            output.push_str(&" ".repeat(padding));
+            output.push_str("# ");
+            output.push_str(help);
+        }
+        output.push('\n');
+        if show_tag_examples {
+            output.push_str("  # - coding\n  # - review\n");
+        }
+    }
+    output
 }
 
 pub fn export_for_editor(document: &PromptDocument) -> Result<String> {
@@ -198,7 +218,7 @@ mod tests {
 
         assert_eq!(
             export(&document).unwrap(),
-            "---\n# name: required unique name. Other fields are optional.\n# description: short description.\n# tags: YAML list, for example:\n# tags:\n#   - coding\n#   - review\n# exec: command, e.g. codex exec -.\n# Enter the prompt body below the closing --- delimiter.\n\nname: test\ndescription:\ntags:\nexec:\n---\n\nbody"
+            "---\nname: test          # required, unique\ndescription:        # optional, short description\ntags:               # optional, YAML list\n  # - coding\n  # - review\nexec:               # optional, e.g. codex exec -\n---\n\nbody"
         );
     }
 

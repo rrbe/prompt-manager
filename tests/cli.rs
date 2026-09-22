@@ -213,7 +213,7 @@ fn add_no_edit_validates_the_prompt_body() {
         .code(1)
         .stdout("")
         .stderr(predicate::str::contains(
-            "invalid template syntax at line 17, column 1: invalid expression `{{ daily report content }}`",
+            "invalid template syntax at line 10, column 1: invalid expression `{{ daily report content }}`",
         ));
 }
 
@@ -1110,6 +1110,27 @@ fn exec_help_shows_configured_command_and_appended_argument_examples() {
 }
 
 #[test]
+fn document_commands_explain_the_prompt_format() {
+    let directory = TempDir::new().unwrap();
+
+    for command in ["add", "edit", "import", "export"] {
+        pm(directory.path())
+            .args([command, "--help"])
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("Prompt document format:"))
+            .stdout(predicate::str::contains("name: code-review"))
+            .stdout(predicate::str::contains(
+                "description, tags, and exec fields are optional",
+            ))
+            .stdout(predicate::str::contains(
+                "Variables use {{name}} or {{name=default}}",
+            ))
+            .stderr("");
+    }
+}
+
+#[test]
 fn completions_help_explains_generation_and_installation() {
     let directory = TempDir::new().unwrap();
     pm(directory.path())
@@ -1383,7 +1404,7 @@ fn add_opens_a_document_with_commented_optional_fields() {
         .stdout("");
     assert_eq!(
         fs::read_to_string(snapshot).unwrap(),
-        "---\n# name: required unique name. Other fields are optional.\n# description: short description.\n# tags: YAML list, for example:\n# tags:\n#   - coding\n#   - review\n# exec: command, e.g. codex exec -.\n# Enter the prompt body below the closing --- delimiter.\n\nname: review\ndescription:\ntags:\nexec:\n---\n\nReview {{input}}"
+        "---\nname: review        # required, unique\ndescription:        # optional, short description\ntags:               # optional, YAML list\n  # - coding\n  # - review\nexec:               # optional, e.g. codex exec -\n---\n\nReview {{input}}"
     );
     pm(directory.path())
         .args(["get", "review", "-v", "input=code"])
@@ -1549,7 +1570,7 @@ fn edit_opens_the_same_document_structure_as_add() {
         .stderr("");
     assert_eq!(
         fs::read_to_string(snapshot).unwrap(),
-        "---\n# name: required unique name. Other fields are optional.\n# description: short description.\n# tags: YAML list, for example:\n# tags:\n#   - coding\n#   - review\n# exec: command, e.g. codex exec -.\n# Enter the prompt body below the closing --- delimiter.\n\nname: created\ndescription:\ntags:\nexec:\n---\n\nfirst body"
+        "---\nname: created       # required, unique\ndescription:        # optional, short description\ntags:               # optional, YAML list\n  # - coding\n  # - review\nexec:               # optional, e.g. codex exec -\n---\n\nfirst body"
     );
 }
 

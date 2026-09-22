@@ -9,6 +9,8 @@ use clap_complete::engine::{ArgValueCompleter, CompletionCandidate};
 
 use crate::prompt::template::is_valid_variable_name;
 
+const PROMPT_FORMAT_HELP: &str = "Prompt document format:\n  ---\n  name: code-review\n  description: Review source code\n  tags:\n    - coding\n    - review\n  exec: codex exec -\n  ---\n\n  Review the following code:\n\n  {{input}}\n\nThe text after the closing --- is the prompt content. The description, tags, and exec fields are optional. Variables use {{name}} or {{name=default}}.";
+
 #[derive(Debug, Parser)]
 #[command(name = "pm", version, about)]
 pub struct Cli {
@@ -20,10 +22,12 @@ pub struct Cli {
 pub enum Command {
     /// Create a prompt from stdin or an external editor.
     #[command(
+        before_long_help = PROMPT_FORMAT_HELP,
         after_long_help = "Examples:\n  # Edit a prompt initialized from piped output\n  generate-prompt | pm add generated\n\n  # Edit a prompt initialized from a file's contents\n  pm add from-file < prompt-body.md\n\n  # Save piped output without opening the editor\n  generate-prompt | pm add generated --no-edit"
     )]
     Add(AddArgs),
     /// Edit an existing prompt using an external editor.
+    #[command(before_long_help = PROMPT_FORMAT_HELP)]
     Edit(NameArgs),
     /// Remove one or more prompts.
     #[command(visible_alias = "remove")]
@@ -46,8 +50,10 @@ pub enum Command {
     /// Search prompt names, descriptions, and bodies.
     Search(SearchArgs),
     /// Import a Markdown prompt file.
+    #[command(before_long_help = PROMPT_FORMAT_HELP)]
     Import(ImportArgs),
     /// Export a prompt as Markdown.
+    #[command(before_long_help = PROMPT_FORMAT_HELP)]
     Export(ExportArgs),
     /// Add or remove a prompt from favorites.
     Favorite(FavoriteArgs),
