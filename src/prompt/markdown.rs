@@ -34,6 +34,7 @@ const FIELD_HELP: &str = "# name: required unique name. Other fields are optiona
 #   - review\n\
 # exec: command, e.g. codex exec -.\n\
 # Enter the prompt body below the closing --- delimiter.";
+const CONTENT_PLACEHOLDER: &str = "<!-- Enter prompt content here. -->";
 
 fn deserialize_optional_tags<'de, D>(deserializer: D) -> std::result::Result<Vec<String>, D::Error>
 where
@@ -85,6 +86,24 @@ pub fn export(document: &PromptDocument) -> Result<String> {
         "---\n{FIELD_HELP}\n\n{yaml}---\n\n{}",
         document.content
     ))
+}
+
+pub fn export_for_editor(document: &PromptDocument) -> Result<String> {
+    let markdown = export(document)?;
+    if document.content.is_empty() {
+        return Ok(format!("{markdown}{CONTENT_PLACEHOLDER}"));
+    }
+    Ok(markdown)
+}
+
+pub fn parse_editor(source: &str) -> Result<PromptDocument> {
+    let mut document = parse(source)?;
+    document.content = document
+        .content
+        .split_inclusive('\n')
+        .filter(|line| trim_line_ending(line) != CONTENT_PLACEHOLDER)
+        .collect();
+    Ok(document)
 }
 
 fn split_front_matter(source: &str) -> Result<(&str, &str)> {
@@ -180,6 +199,36 @@ mod tests {
         assert_eq!(
             export(&document).unwrap(),
             "---\n# name: required unique name. Other fields are optional.\n# description: short description.\n# tags: YAML list, for example:\n# tags:\n#   - coding\n#   - review\n# exec: command, e.g. codex exec -.\n# Enter the prompt body below the closing --- delimiter.\n\nname: test\ndescription:\ntags:\nexec:\n---\n\nbody"
+        );
+    }
+
+    #[test]
+    fn editor_document_uses_a_non_persistent_content_placeholder() {
+        let document = PromptDocument {
+            name: "test".into(),
+            description: None,
+            tags: Vec::new(),
+            exec: None,
+            content: String::new(),
+        };
+
+        let markdown = export_for_editor(&document).unwrap();
+        assert!(markdown.ends_with("\n\n<!-- Enter prompt content here. -->"));
+        assert_eq!(parse_editor(&markdown).unwrap(), document);
+
+        let with_content = format!("{markdown}\nReview this code.");
+        assert_eq!(
+            parse_editor(&with_content).unwrap().content,
+            "Review this code."
+        );
+
+        let before_placeholder = with_content.replace(
+            CONTENT_PLACEHOLDER,
+            &format!("Review this code.\n{CONTENT_PLACEHOLDER}"),
+        );
+        assert_eq!(
+            parse_editor(&before_placeholder).unwrap().content,
+            "Review this code.\nReview this code."
         );
     }
 

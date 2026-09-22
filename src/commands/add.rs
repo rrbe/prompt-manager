@@ -27,11 +27,12 @@ pub fn run(arguments: AddArgs, database: &mut Database) -> Result<()> {
     if let Some(content) = stdin::read_piped_input_if_available()? {
         document.content = content;
     }
-    let initial = markdown::export(&document)?;
     let document = if arguments.no_edit {
+        let initial = markdown::export(&document)?;
         markdown::parse(&initial)?
     } else {
-        editor::edit_until_valid(&initial, markdown::parse)?
+        let initial = markdown::export_for_editor(&document)?;
+        editor::edit_until_valid(&initial, markdown::parse_editor)?
     };
     if document.content.trim().is_empty() {
         eprintln!(

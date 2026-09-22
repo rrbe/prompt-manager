@@ -1394,6 +1394,38 @@ fn add_opens_a_document_with_commented_optional_fields() {
 
 #[cfg(unix)]
 #[test]
+fn add_shows_a_non_persistent_prompt_content_placeholder() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let directory = TempDir::new().unwrap();
+    let snapshot = directory.path().join("initial.md");
+    let editor = directory.path().join("editor.sh");
+    fs::write(&editor, "#!/bin/sh\ncp \"$1\" \"$EDITOR_SNAPSHOT\"\n").unwrap();
+    fs::set_permissions(&editor, fs::Permissions::from_mode(0o700)).unwrap();
+
+    pm(directory.path())
+        .env("VISUAL", &editor)
+        .env("EDITOR_SNAPSHOT", &snapshot)
+        .args(["add", "empty"])
+        .assert()
+        .success()
+        .stdout("")
+        .stderr("Prompt 'empty' was not created: content is empty.\n");
+    assert!(
+        fs::read_to_string(snapshot)
+            .unwrap()
+            .ends_with("\n\n<!-- Enter prompt content here. -->")
+    );
+    pm(directory.path())
+        .args(["get", "empty"])
+        .assert()
+        .failure()
+        .stdout("")
+        .stderr(predicate::str::contains("prompt not found: empty"));
+}
+
+#[cfg(unix)]
+#[test]
 fn add_rejects_an_existing_name_before_opening_the_editor() {
     use std::os::unix::fs::PermissionsExt;
 
