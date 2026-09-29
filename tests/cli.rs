@@ -1735,3 +1735,183 @@ fn invalid_cli_arguments_use_exit_code_two() {
         .stdout("")
         .stderr(predicate::str::contains("cannot be used with"));
 }
+
+fn store_lint_prompt(directory: &Path, name: &str, content: &str) {
+    let mut database = prompt_manager::db::Database::open(&directory.join("pm/pm.db")).unwrap();
+    database
+        .create_prompt(&prompt_manager::db::PromptInput {
+            name: name.into(),
+            description: None,
+            content: content.into(),
+            tags: vec![],
+            exec: Some("this-command-must-not-run".into()),
+        })
+        .unwrap();
+}
+
+#[test]
+fn lint_checks_references_without_variable_values_or_side_effects() {
+    let directory = TempDir::new().unwrap();
+    store_lint_prompt(directory.path(), "all", "{{input}} {{value}}");
+    store_lint_prompt(directory.path(), "root", "{{prompt:all}}");
+    let path = directory.path().join("pm/pm.db");
+    let mut database = prompt_manager::db::Database::open(&path).unwrap();
+    let before = database.get_prompt("root").unwrap();
+    pm(directory.path())
+        .args(["lint", "root"])
+        .assert()
+        .success()
+        .stdout("")
+        .stderr("\nChecked 2 prompts · 0 errors · 0 warnings\n\n");
+    pm(directory.path())
+        .args(["lint", "all"])
+        .assert()
+        .success();
+    assert_eq!(database.get_prompt("root").unwrap(), before);
+    assert_eq!(database.prompt_history("root").unwrap().len(), 1);
+    assert_eq!(database.get_prompt("all").unwrap().use_count, 0);
+}
+
+#[test]
+fn lint_all_reports_errors_and_continues_to_other_prompts() {
+    let directory = TempDir::new().unwrap();
+    store_lint_prompt(directory.path(), "broken", "text\n{{invalid name}}");
+    store_lint_prompt(directory.path(), "unclosed", "{{value");
+    store_lint_prompt(directory.path(), "defaults", "{{x=a}} {{x=b}}");
+    store_lint_prompt(directory.path(), "missing", "中文 {{prompt:absent}}");
+    store_lint_prompt(directory.path(), "valid", "{{input}}");
+    pm(directory.path())
+        .args(["lint", "--all"])
+        .assert()
+        .code(1)
+        .stdout("")
+        .stderr(predicate::str::contains(
+            "broken\n  Error  invalid template syntax at line 2, column 1",
+        ))
+        .stderr(predicate::str::contains("unclosed `{{`"))
+        .stderr(predicate::str::contains(
+            "conflicting defaults for variable `x`",
+        ))
+        .stderr(predicate::str::contains(
+            "missing\n  Error  Prompt not found: absent (line 1, column 4)",
+        ))
+        .stderr(predicate::str::contains(
+            "Checked 5 prompts · 4 errors · 0 warnings",
+        ));
+}
+
+#[test]
+fn lint_reports_cycles_and_conflicts_after_composition() {
+    let directory = TempDir::new().unwrap();
+    store_lint_prompt(directory.path(), "a", "{{prompt:b}}");
+    store_lint_prompt(directory.path(), "b", "{{prompt:a}}");
+    store_lint_prompt(directory.path(), "shared", "{{language=rust}}");
+    store_lint_prompt(
+        directory.path(),
+        "root",
+        "{{prompt:shared}}\n{{language=go}}",
+    );
+    pm(directory.path())
+        .args(["lint", "a"])
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains(
+            "prompt composition cycle: a -> b -> a",
+        ));
+    pm(directory.path())
+        .args(["lint", "root"])
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains("root\n  Error  Expanded content:"))
+        .stderr(predicate::str::contains(
+            "conflicting defaults for variable `language`",
+        ));
+}
+
+#[test]
+fn lint_warnings_succeed_and_check_shared_sources_once() {
+    let directory = TempDir::new().unwrap();
+    store_lint_prompt(directory.path(), "empty", " \n");
+    store_lint_prompt(directory.path(), "shared", "中文 {value}\n{value}");
+    store_lint_prompt(
+        directory.path(),
+        "root",
+        "{{prompt:shared}} {{prompt:shared}}",
+    );
+    pm(directory.path())
+        .args(["lint", "--all"])
+        .assert()
+        .success()
+        .stdout("")
+        .stderr(predicate::str::contains(
+            "empty\n  Warning  Content is empty",
+        ))
+        .stderr(predicate::str::contains(
+            "shared\n  Warning  Single-brace variable at line 1, column 4",
+        ))
+        .stderr(predicate::str::contains(
+            "  Warning  Single-brace variable at line 2, column 1",
+        ))
+        .stderr(predicate::str::contains(
+            "Checked 3 prompts · 0 errors · 3 warnings",
+        ));
+}
+
+#[test]
+fn lint_checks_syntax_in_referenced_prompts() {
+    let directory = TempDir::new().unwrap();
+    store_lint_prompt(directory.path(), "child", "{{bad name}}");
+    store_lint_prompt(directory.path(), "root", "{{prompt:child}}");
+    pm(directory.path())
+        .args(["lint", "root"])
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains(
+            "child\n  Error  invalid template syntax at line 1, column 1",
+        ));
+}
+
+#[test]
+fn lint_requires_one_target_and_handles_empty_database() {
+    let directory = TempDir::new().unwrap();
+    pm(directory.path()).args(["lint"]).assert().code(2);
+    pm(directory.path())
+        .args(["lint", "name", "--all"])
+        .assert()
+        .code(2);
+    pm(directory.path())
+        .args(["lint", "missing"])
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains("prompt not found: missing"));
+    pm(directory.path())
+        .args(["lint", "--all"])
+        .assert()
+        .success()
+        .stdout("")
+        .stderr("\nChecked 0 prompts · 0 errors · 0 warnings\n\n");
+}
+
+#[test]
+fn lint_formats_grouped_diagnostics_and_respects_color_preferences() {
+    let directory = TempDir::new().unwrap();
+    store_lint_prompt(directory.path(), "uninstall-app", "Run{ app_name }");
+    let expected = "\nuninstall-app\n  Warning  Single-brace variable at line 1, column 4\n           Replace: { app_name }  →  {{ app_name }}\n\nChecked 1 prompt · 0 errors · 1 warning\n\n";
+    pm(directory.path())
+        .env("NO_COLOR", "1")
+        .args(["lint", "uninstall-app"])
+        .assert()
+        .success()
+        .stdout("")
+        .stderr(expected);
+    let output = pm(directory.path())
+        .env_remove("NO_COLOR")
+        .env("CLICOLOR_FORCE", "1")
+        .args(["lint", "uninstall-app"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let colored = String::from_utf8(output.stderr).unwrap();
+    assert!(colored.contains("\u{1b}["));
+    assert_eq!(anstream::adapter::strip_str(&colored).to_string(), expected);
+}

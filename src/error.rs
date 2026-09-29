@@ -2,6 +2,9 @@ use std::{io, path::PathBuf};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    #[error("prompt lint failed")]
+    LintFailed,
+
     #[error("{0}")]
     Message(String),
 

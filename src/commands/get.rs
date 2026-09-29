@@ -125,7 +125,7 @@ fn pick(database: &Database) -> Result<String> {
     Ok(selection.to_owned())
 }
 
-fn expand_compositions(
+pub(super) fn expand_compositions(
     database: &mut Database,
     content: &str,
     stack: &mut Vec<String>,

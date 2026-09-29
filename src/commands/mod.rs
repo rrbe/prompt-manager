@@ -7,6 +7,7 @@ mod favorite;
 mod get;
 mod history;
 mod import;
+mod lint;
 mod list;
 mod remove;
 mod search;
@@ -45,6 +46,7 @@ pub fn execute(command: Command, database: &mut Database) -> Result<()> {
         Command::Get(arguments) => get::run(arguments, database),
         Command::Exec(arguments) => exec::run(arguments, database),
         Command::List(arguments) => list::run(arguments, database),
+        Command::Lint(arguments) => lint::run(arguments, database),
         Command::Search(arguments) => search::run(arguments, database),
         Command::Import(arguments) => import::run(arguments, database),
         Command::Export(arguments) => export::run(arguments, database),

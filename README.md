@@ -229,6 +229,28 @@ pm import code-review.md
 pm export --all ./prompts/
 ```
 
+### Prompt Linting
+
+```bash
+pm lint code-review
+pm lint --all
+```
+
+Check stored prompts and their referenced prompts for invalid template expressions,
+unclosed `{{`, conflicting variable defaults, missing references, and composition
+cycles. Defaults are also checked after composition. Suspected single-brace variables
+such as `{input}` and empty bodies produce warnings.
+
+Diagnostics are grouped by prompt, with indented replacement suggestions and a final
+summary. Terminal output uses colors for prompt names, warnings, and errors;
+redirected output stays plain, and `NO_COLOR=1` disables colors.
+Diagnostics and the summary go to stderr; stdout stays empty. Errors return exit
+code 1, while warnings alone return 0. Source positions are relative to the prompt
+body; diagnostics labeled `expanded content` refer to the combined body. Each body
+reports its first template syntax error, and `--all` continues checking other prompts.
+Lint does not request variable values, execute commands, or change prompt content,
+history, or usage counts. `pm lint all` checks a prompt literally named `all`.
+
 ### 7. Shell Completion
 
 Generate static completion scripts for Bash, Zsh, or Fish:

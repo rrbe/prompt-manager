@@ -47,6 +47,9 @@ pub enum Command {
         after_long_help = "Examples:\n  # Show the default usage table\n  pm list\n\n  # Show all prompt metadata except content\n  pm list --full\n\n  # Print prompt names for a pipeline\n  pm list --quiet | fzf"
     )]
     List(ListArgs),
+    /// Check stored prompt syntax and composition references.
+    #[command(after_long_help = "Examples:\n  pm lint code-review\n  pm lint --all")]
+    Lint(LintArgs),
     /// Search prompt names, descriptions, and bodies.
     Search(SearchArgs),
     /// Import a Markdown prompt file.
@@ -73,6 +76,17 @@ pub enum Command {
 pub struct NameArgs {
     #[arg(add = ArgValueCompleter::new(prompt_name_completer))]
     pub name: String,
+}
+
+#[derive(Debug, Args)]
+pub struct LintArgs {
+    /// Prompt to check, including its referenced prompts.
+    #[arg(required_unless_present = "all", conflicts_with = "all", add = ArgValueCompleter::new(prompt_name_completer))]
+    pub name: Option<String>,
+
+    /// Check every stored prompt.
+    #[arg(long)]
+    pub all: bool,
 }
 
 #[derive(Debug, Args)]
