@@ -9,7 +9,7 @@ use crate::{
     prompt::{markdown, validate_name},
 };
 
-use super::{prompt_to_document, write_stdout};
+use super::{output::write_stdout, prompt_to_document};
 
 pub fn run(arguments: ExportArgs, database: &mut Database) -> Result<()> {
     if arguments.all {

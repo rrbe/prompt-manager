@@ -8,7 +8,7 @@ use crate::{
     error::{Error, Result},
 };
 
-use super::write_stdout;
+use super::output::write_stdout;
 
 pub fn run(arguments: CompletionsArgs) -> Result<()> {
     if arguments.dynamic {

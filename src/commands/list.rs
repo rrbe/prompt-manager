@@ -10,7 +10,7 @@ use anstyle::{AnsiColor, Style};
 use time::{OffsetDateTime, UtcOffset};
 use timeago::{Formatter, TimeUnit};
 
-use super::{
+use super::output::{
     clean_inline, current_local_offset, format_local_timestamp, format_table,
     stdout_supports_color, write_paged_stdout, write_stdout,
 };

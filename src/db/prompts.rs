@@ -1,6 +1,9 @@
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
-use crate::error::{Error, Result};
+use crate::{
+    error::{Error, Result},
+    prompt::PromptDocument,
+};
 
 use super::{Database, history, now_timestamp, tags};
 
@@ -17,15 +20,6 @@ pub struct Prompt {
     pub last_used_at: Option<i64>,
     pub use_count: i64,
     pub favorite: bool,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PromptInput {
-    pub name: String,
-    pub description: Option<String>,
-    pub content: String,
-    pub tags: Vec<String>,
-    pub exec: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -47,7 +41,7 @@ impl Database {
         Ok(prompt_id(&self.connection, name)?.is_some())
     }
 
-    pub fn create_prompt(&mut self, input: &PromptInput) -> Result<()> {
+    pub fn create_prompt(&mut self, input: &PromptDocument) -> Result<()> {
         let transaction = self.connection.transaction()?;
         if prompt_id(&transaction, &input.name)?.is_some() {
             return Err(Error::PromptAlreadyExists(input.name.clone()));
@@ -96,7 +90,7 @@ impl Database {
         Ok(())
     }
 
-    pub fn update_prompt(&mut self, original_name: &str, input: &PromptInput) -> Result<()> {
+    pub fn update_prompt(&mut self, original_name: &str, input: &PromptDocument) -> Result<()> {
         let transaction = self.connection.transaction()?;
         let Some(current) = query_prompt(&transaction, original_name)? else {
             return Err(Error::PromptNotFound(original_name.to_owned()));
@@ -295,8 +289,8 @@ fn query_prompt(transaction: &Transaction<'_>, name: &str) -> Result<Option<Prom
 mod tests {
     use super::*;
 
-    fn input(name: &str, content: &str, tags: &[&str]) -> PromptInput {
-        PromptInput {
+    fn input(name: &str, content: &str, tags: &[&str]) -> PromptDocument {
+        PromptDocument {
             name: name.into(),
             description: None,
             content: content.into(),

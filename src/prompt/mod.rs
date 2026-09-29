@@ -5,6 +5,36 @@ use std::collections::BTreeSet;
 
 use crate::error::{Error, Result};
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PromptDocument {
+    pub name: String,
+    pub description: Option<String>,
+    pub tags: Vec<String>,
+    pub exec: Option<String>,
+    pub content: String,
+}
+
+impl PromptDocument {
+    pub fn normalize(self) -> Result<Self> {
+        self.normalize_with_line_offset(0)
+    }
+
+    pub(crate) fn normalize_with_line_offset(self, line_offset: usize) -> Result<Self> {
+        let document = self.normalize_metadata()?;
+        template::validate_with_line_offset(&document.content, line_offset)?;
+        Ok(document)
+    }
+
+    fn normalize_metadata(mut self) -> Result<Self> {
+        validate_name(&self.name)?;
+        self.tags = normalize_tags(self.tags)?;
+        if let Some(command) = &self.exec {
+            parse_exec_command(command)?;
+        }
+        Ok(self)
+    }
+}
+
 pub fn parse_exec_command(command: &str) -> Result<Vec<String>> {
     let arguments = shell_words::split(command)
         .map_err(|error| Error::Message(format!("invalid exec command: {error}")))?;
@@ -60,6 +90,57 @@ pub fn normalize_tags(tags: Vec<String>) -> Result<Vec<String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn normalizes_documents_without_changing_body_bytes() {
+        let content = "\r\n---\r\n中文 {{input=default}}\r\n\r\n";
+        let document = PromptDocument {
+            name: "example".into(),
+            description: None,
+            tags: vec![" review ".into(), "review".into(), "coding".into()],
+            exec: Some("codex exec -".into()),
+            content: content.into(),
+        }
+        .normalize()
+        .unwrap();
+        assert_eq!(document.content, content);
+        assert_eq!(document.tags, ["coding", "review"]);
+        assert_eq!(
+            markdown::parse(&markdown::export(&document).unwrap()).unwrap(),
+            document
+        );
+    }
+
+    #[test]
+    fn reports_direct_body_and_markdown_source_line_numbers() {
+        let document = PromptDocument {
+            name: "example".into(),
+            description: None,
+            tags: vec![],
+            exec: None,
+            content: "body\n{{invalid!}}".into(),
+        };
+        assert!(
+            document
+                .clone()
+                .normalize()
+                .unwrap_err()
+                .to_string()
+                .contains("line 2, column 1")
+        );
+        let source = markdown::export(&document).unwrap();
+        let expected_line = source[..source.find("{{").unwrap()]
+            .bytes()
+            .filter(|byte| *byte == b'\n')
+            .count()
+            + 1;
+        assert!(
+            markdown::parse(&source)
+                .unwrap_err()
+                .to_string()
+                .contains(&format!("line {expected_line}, column 1"))
+        );
+    }
 
     #[test]
     fn validates_prompt_names() {

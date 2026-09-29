@@ -6,7 +6,7 @@ use crate::{
     prompt::{markdown, validate_name},
 };
 
-use super::{document_to_input, prompt_to_document};
+use super::prompt_to_document;
 
 pub fn run(arguments: NameArgs, database: &mut Database) -> Result<()> {
     validate_name(&arguments.name)?;
@@ -14,5 +14,5 @@ pub fn run(arguments: NameArgs, database: &mut Database) -> Result<()> {
     let initial = markdown::export_for_editor(&prompt_to_document(prompt))?;
     let document = editor::edit_until_valid(&initial, markdown::parse_editor)?;
     super::warn_single_brace_variables(&document.content);
-    database.update_prompt(&arguments.name, &document_to_input(document))
+    database.update_prompt(&arguments.name, &document)
 }

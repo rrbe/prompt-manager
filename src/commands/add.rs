@@ -3,14 +3,9 @@ use crate::{
     db::Database,
     editor,
     error::{Error, Result},
-    prompt::{
-        markdown::{self, PromptDocument},
-        validate_name,
-    },
+    prompt::{PromptDocument, markdown, validate_name},
     stdin,
 };
-
-use super::document_to_input;
 
 pub fn run(arguments: AddArgs, database: &mut Database) -> Result<()> {
     validate_name(&arguments.name)?;
@@ -28,8 +23,7 @@ pub fn run(arguments: AddArgs, database: &mut Database) -> Result<()> {
         document.content = content;
     }
     let document = if arguments.no_edit {
-        let initial = markdown::export(&document)?;
-        markdown::parse(&initial)?
+        document.normalize()?
     } else {
         let initial = markdown::export_for_editor(&document)?;
         editor::edit_until_valid(&initial, markdown::parse_editor)?
@@ -42,5 +36,5 @@ pub fn run(arguments: AddArgs, database: &mut Database) -> Result<()> {
         return Ok(());
     }
     super::warn_single_brace_variables(&document.content);
-    database.create_prompt(&document_to_input(document))
+    database.create_prompt(&document)
 }

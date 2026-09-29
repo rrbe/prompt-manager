@@ -105,7 +105,7 @@ fn run_with(
     colors_enabled: bool,
 ) -> Result<()> {
     let Some(version) = updater.available_version()? else {
-        let status = super::style_text(
+        let status = super::output::style_text(
             "is up to date",
             anstyle::AnsiColor::Green.on_default(),
             colors_enabled,
@@ -115,7 +115,7 @@ fn run_with(
     };
 
     if arguments.check {
-        let status = super::style_text(
+        let status = super::output::style_text(
             "is available",
             anstyle::AnsiColor::Yellow.on_default(),
             colors_enabled,
@@ -125,7 +125,7 @@ fn run_with(
     }
 
     let installed_version = updater.install(&version)?;
-    let status = super::style_text(
+    let status = super::output::style_text(
         "updated pm",
         anstyle::AnsiColor::Green.on_default(),
         colors_enabled,

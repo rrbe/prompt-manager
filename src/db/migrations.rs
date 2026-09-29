@@ -68,7 +68,7 @@ impl Database {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::PromptInput;
+    use crate::prompt::PromptDocument;
     use rusqlite::Connection;
 
     #[test]
@@ -120,7 +120,7 @@ mod tests {
 
         database.delete_prompt("existing").unwrap();
         database
-            .create_prompt(&PromptInput {
+            .create_prompt(&PromptDocument {
                 name: "new".into(),
                 description: None,
                 content: "body".into(),

@@ -47,11 +47,11 @@ fn literal_fts_query(query: &str) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db::PromptInput;
+    use crate::prompt::PromptDocument;
 
     fn create(database: &mut Database, name: &str, description: Option<&str>, content: &str) {
         database
-            .create_prompt(&PromptInput {
+            .create_prompt(&PromptDocument {
                 name: name.into(),
                 description: description.map(Into::into),
                 content: content.into(),
@@ -80,7 +80,7 @@ mod tests {
         database
             .update_prompt(
                 "mongo-review",
-                &PromptInput {
+                &PromptDocument {
                     name: "sql-review".into(),
                     description: Some("relational".into()),
                     content: "new token".into(),

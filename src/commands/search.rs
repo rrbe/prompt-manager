@@ -1,6 +1,6 @@
 use crate::{cli::SearchArgs, db::Database, error::Result};
 
-use super::{clean_inline, write_stdout};
+use super::output::{clean_inline, write_stdout};
 
 pub fn run(arguments: SearchArgs, database: &Database) -> Result<()> {
     let results = database.search_prompts(&arguments.query)?;

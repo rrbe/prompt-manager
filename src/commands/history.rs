@@ -5,13 +5,10 @@ use crate::{
     cli::{HistoryArgs, HistoryCommand, HistoryDiffArgs},
     db::{Database, PromptVersion},
     error::Result,
-    prompt::{
-        markdown::{self, PromptDocument},
-        validate_name,
-    },
+    prompt::{PromptDocument, markdown, validate_name},
 };
 
-use super::{
+use super::output::{
     current_local_offset, format_local_timestamp, format_table, stdout_supports_color, style_text,
     write_stdout,
 };

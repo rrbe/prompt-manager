@@ -2,7 +2,8 @@ use rusqlite::{OptionalExtension, Transaction, params};
 
 use crate::error::{Error, Result};
 
-use super::{Database, PromptInput};
+use super::Database;
+use crate::prompt::PromptDocument;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PromptVersionSummary {
@@ -89,7 +90,7 @@ impl Database {
 pub(super) fn record_version(
     transaction: &Transaction<'_>,
     prompt_id: i64,
-    input: &PromptInput,
+    input: &PromptDocument,
     created_at: i64,
 ) -> Result<()> {
     let version: i64 = transaction.query_row(

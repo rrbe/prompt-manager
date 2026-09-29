@@ -2,17 +2,8 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::{
     error::{Error, Result},
-    prompt::{normalize_tags, parse_exec_command, template, validate_name},
+    prompt::PromptDocument,
 };
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PromptDocument {
-    pub name: String,
-    pub description: Option<String>,
-    pub tags: Vec<String>,
-    pub exec: Option<String>,
-    pub content: String,
-}
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -39,37 +30,29 @@ where
 pub fn parse(source: &str) -> Result<PromptDocument> {
     let (metadata_source, body) = split_front_matter(source)?;
     let metadata: Metadata = serde_yaml::from_str(metadata_source)?;
-    validate_name(&metadata.name)?;
-    let tags = normalize_tags(metadata.tags)?;
-    if let Some(command) = &metadata.exec {
-        parse_exec_command(command)?;
-    }
     let body_start = source.len() - body.len();
     let body_line_offset = source[..body_start]
         .bytes()
         .filter(|byte| *byte == b'\n')
         .count();
-    template::validate_with_line_offset(body, body_line_offset)?;
 
-    Ok(PromptDocument {
+    PromptDocument {
         name: metadata.name,
         description: metadata.description,
-        tags,
+        tags: metadata.tags,
         exec: metadata.exec,
         content: body.to_owned(),
-    })
+    }
+    .normalize_with_line_offset(body_line_offset)
 }
 
 pub fn export(document: &PromptDocument) -> Result<String> {
-    validate_name(&document.name)?;
-    if let Some(command) = &document.exec {
-        parse_exec_command(command)?;
-    }
+    let document = document.clone().normalize_metadata()?;
     let metadata = Metadata {
-        name: document.name.clone(),
-        description: document.description.clone(),
-        tags: normalize_tags(document.tags.clone())?,
-        exec: document.exec.clone(),
+        name: document.name,
+        description: document.description,
+        tags: document.tags,
+        exec: document.exec,
     };
     let yaml = serde_yaml::to_string(&metadata)?
         .replace("description: null\n", "description:\n")

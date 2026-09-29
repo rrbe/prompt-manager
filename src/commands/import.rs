@@ -7,8 +7,6 @@ use crate::{
     prompt::markdown,
 };
 
-use super::document_to_input;
-
 pub fn run(arguments: ImportArgs, database: &mut Database) -> Result<()> {
     let bytes = fs::read(&arguments.file).map_err(|source| Error::ReadFile {
         path: arguments.file.clone(),
@@ -21,5 +19,5 @@ pub fn run(arguments: ImportArgs, database: &mut Database) -> Result<()> {
         ))
     })?;
     let document = markdown::parse(&source)?;
-    database.create_prompt(&document_to_input(document))
+    database.create_prompt(&document)
 }

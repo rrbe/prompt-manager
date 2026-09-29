@@ -33,7 +33,8 @@ pub fn run(arguments: LintArgs, database: &mut Database) -> Result<()> {
     }
     for name in &names {
         let prompt = database.get_prompt(name)?;
-        match super::get::expand_compositions(database, &prompt.content, &mut vec![name.clone()]) {
+        match super::render::expand_compositions(database, &prompt.content, &mut vec![name.clone()])
+        {
             Ok(content) => {
                 // Source syntax was checked separately; expanded positions refer to the combined body.
                 if content != prompt.content

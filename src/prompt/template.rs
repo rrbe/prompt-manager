@@ -32,87 +32,108 @@ pub fn validate(template: &str) -> Result<()> {
     validate_with_line_offset(template, 0)
 }
 
-pub(crate) fn validate_with_line_offset(template: &str, line_offset: usize) -> Result<()> {
-    let mut cursor = 0;
-    let mut defaults = HashMap::new();
-
-    loop {
-        let opening = template[cursor..]
-            .find("{{")
-            .map(|position| cursor + position);
-
-        let Some(opening) = opening else {
-            return Ok(());
-        };
-        let value_start = opening + 2;
-        let Some(relative_closing) = template[value_start..].find("}}") else {
-            return Err(syntax_error(
-                template,
-                opening,
-                line_offset,
-                "unclosed `{{`",
-            ));
-        };
-        let closing = value_start + relative_closing;
-        let candidate = template[value_start..closing].trim();
-
-        match variable_expression(candidate) {
-            Some((name, Some(default))) => {
-                if let Some(existing) = defaults.insert(name, default)
-                    && existing != default
-                {
-                    return Err(syntax_error(
-                        template,
-                        opening,
-                        line_offset,
-                        &format!("conflicting defaults for variable `{name}`"),
-                    ));
-                }
-            }
-            Some((_, None)) => {}
-            None if composition_name(candidate).is_some() => {}
-            None => {
-                return Err(syntax_error(
-                    template,
-                    opening,
-                    line_offset,
-                    &format!("invalid expression `{}`", &template[opening..closing + 2]),
-                ));
-            }
-        }
-
-        cursor = closing + 2;
-    }
+enum ExpressionKind<'a> {
+    Variable {
+        name: &'a str,
+        default: Option<&'a str>,
+    },
+    Composition(&'a str),
+    Invalid,
+    Unclosed,
 }
 
-pub fn placeholders(template: &str) -> Vec<Placeholder> {
-    let bytes = template.as_bytes();
-    let mut result = Vec::new();
-    let mut cursor = 0;
+struct Expression<'a> {
+    start: usize,
+    end: usize,
+    kind: ExpressionKind<'a>,
+}
 
-    while let Some(relative_open) = find_pair(&bytes[cursor..], b'{', b'{') {
-        let open = cursor + relative_open;
-        let value_start = open + 2;
-        let Some(relative_close) = find_pair(&bytes[value_start..], b'}', b'}') else {
-            break;
+fn expressions(template: &str) -> impl Iterator<Item = Expression<'_>> {
+    let mut cursor = 0;
+    std::iter::from_fn(move || {
+        let start = cursor + template[cursor..].find("{{")?;
+        let value_start = start + 2;
+        let Some(relative_close) = template[value_start..].find("}}") else {
+            cursor = template.len();
+            return Some(Expression {
+                start,
+                end: cursor,
+                kind: ExpressionKind::Unclosed,
+            });
         };
         let close = value_start + relative_close;
         let candidate = template[value_start..close].trim();
-
-        if let Some((name, default)) = variable_expression(candidate) {
-            result.push(Placeholder {
-                start: open,
-                end: close + 2,
-                name: name.to_owned(),
-                default: default.map(str::to_owned),
-            });
-            cursor = close + 2;
+        let kind = if let Some((name, default)) = variable_expression(candidate) {
+            ExpressionKind::Variable { name, default }
+        } else if let Some(name) = composition_name(candidate) {
+            ExpressionKind::Composition(name)
         } else {
-            cursor = value_start;
+            ExpressionKind::Invalid
+        };
+        // Keep discovering valid expressions nested inside malformed input for lint.
+        cursor = if matches!(kind, ExpressionKind::Invalid) {
+            value_start
+        } else {
+            close + 2
+        };
+        Some(Expression {
+            start,
+            end: close + 2,
+            kind,
+        })
+    })
+}
+
+pub(crate) fn validate_with_line_offset(template: &str, line_offset: usize) -> Result<()> {
+    let mut defaults = HashMap::new();
+    for expression in expressions(template) {
+        let message = match expression.kind {
+            ExpressionKind::Variable {
+                name,
+                default: Some(default),
+            } => {
+                if let Some(existing) = defaults.insert(name, default)
+                    && existing != default
+                {
+                    Some(format!("conflicting defaults for variable `{name}`"))
+                } else {
+                    None
+                }
+            }
+            ExpressionKind::Variable { default: None, .. } | ExpressionKind::Composition(_) => None,
+            ExpressionKind::Invalid => Some(format!(
+                "invalid expression `{}`",
+                &template[expression.start..expression.end]
+            )),
+            ExpressionKind::Unclosed => Some("unclosed `{{`".to_owned()),
+        };
+        if let Some(message) = message {
+            return Err(syntax_error(
+                template,
+                expression.start,
+                line_offset,
+                &message,
+            ));
         }
     }
+    Ok(())
+}
 
-    result
+pub fn placeholders(template: &str) -> Vec<Placeholder> {
+    expressions(template)
+        .filter_map(|expression| {
+            if let ExpressionKind::Variable { name, default } = expression.kind {
+                Some(Placeholder {
+                    start: expression.start,
+                    end: expression.end,
+                    name: name.to_owned(),
+                    default: default.map(str::to_owned),
+                })
+            } else {
+                None
+            }
+        })
+        .collect()
 }
 
 pub fn single_brace_variables(template: &str) -> Vec<&str> {
@@ -145,32 +166,19 @@ pub fn single_brace_variables(template: &str) -> Vec<&str> {
 }
 
 pub fn compositions(template: &str) -> Vec<Composition> {
-    let bytes = template.as_bytes();
-    let mut result = Vec::new();
-    let mut cursor = 0;
-
-    while let Some(relative_open) = find_pair(&bytes[cursor..], b'{', b'{') {
-        let open = cursor + relative_open;
-        let value_start = open + 2;
-        let Some(relative_close) = find_pair(&bytes[value_start..], b'}', b'}') else {
-            break;
-        };
-        let close = value_start + relative_close;
-        let candidate = template[value_start..close].trim();
-
-        if let Some(name) = composition_name(candidate) {
-            result.push(Composition {
-                start: open,
-                end: close + 2,
-                name: name.to_owned(),
-            });
-            cursor = close + 2;
-        } else {
-            cursor = value_start;
-        }
-    }
-
-    result
+    expressions(template)
+        .filter_map(|expression| {
+            if let ExpressionKind::Composition(name) = expression.kind {
+                Some(Composition {
+                    start: expression.start,
+                    end: expression.end,
+                    name: name.to_owned(),
+                })
+            } else {
+                None
+            }
+        })
+        .collect()
 }
 
 pub fn render(template: &str, values: &HashMap<String, String>) -> Result<String> {
@@ -252,12 +260,6 @@ fn syntax_error(template: &str, position: usize, line_offset: usize, message: &s
     ))
 }
 
-fn find_pair(bytes: &[u8], first: u8, second: u8) -> Option<usize> {
-    bytes
-        .windows(2)
-        .position(|window| window[0] == first && window[1] == second)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -267,6 +269,27 @@ mod tests {
             .iter()
             .map(|(key, value)| ((*key).into(), (*value).into()))
             .collect()
+    }
+
+    #[test]
+    fn discovers_references_after_and_inside_invalid_expressions() {
+        let source = "前言 {{bad!}} {{broken {{prompt:shared}} {{value=ok}} {{";
+        assert!(validate(source).is_err());
+        let references = compositions(source);
+        assert_eq!(references.len(), 1);
+        assert_eq!(references[0].name, "shared");
+        assert_eq!(
+            &source[references[0].start..references[0].end],
+            "{{prompt:shared}}"
+        );
+        let variables = placeholders(source);
+        assert_eq!(variables.len(), 1);
+        assert_eq!(variables[0].name, "value");
+        assert_eq!(variables[0].default.as_deref(), Some("ok"));
+        assert_eq!(
+            &source[variables[0].start..variables[0].end],
+            "{{value=ok}}"
+        );
     }
 
     #[test]

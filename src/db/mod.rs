@@ -12,7 +12,7 @@ use time::OffsetDateTime;
 use crate::error::Result;
 
 pub use history::{PromptVersion, PromptVersionSummary};
-pub use prompts::{Prompt, PromptInput, PromptListEntry};
+pub use prompts::{Prompt, PromptListEntry};
 pub use search::SearchResult;
 
 pub struct Database {

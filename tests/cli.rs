@@ -213,7 +213,7 @@ fn add_no_edit_validates_the_prompt_body() {
         .code(1)
         .stdout("")
         .stderr(predicate::str::contains(
-            "invalid template syntax at line 10, column 1: invalid expression `{{ daily report content }}`",
+            "invalid template syntax at line 1, column 1: invalid expression `{{ daily report content }}`",
         ));
 }
 
@@ -1739,7 +1739,7 @@ fn invalid_cli_arguments_use_exit_code_two() {
 fn store_lint_prompt(directory: &Path, name: &str, content: &str) {
     let mut database = prompt_manager::db::Database::open(&directory.join("pm/pm.db")).unwrap();
     database
-        .create_prompt(&prompt_manager::db::PromptInput {
+        .create_prompt(&prompt_manager::prompt::PromptDocument {
             name: name.into(),
             description: None,
             content: content.into(),

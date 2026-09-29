@@ -9,25 +9,17 @@ mod history;
 mod import;
 mod lint;
 mod list;
+mod output;
 mod remove;
+mod render;
 mod search;
 mod update;
 
-use std::{
-    env,
-    io::{self, IsTerminal, Write},
-    process::{Command as ProcessCommand, Stdio},
-};
-
-use anstream::{AutoStream, ColorChoice};
-use anstyle::Style;
-use time::{OffsetDateTime, UtcOffset};
-
 use crate::{
     cli::{Command, CompletionsArgs, UpdateArgs},
-    db::{Database, Prompt, PromptInput},
-    error::{Error, Result},
-    prompt::markdown::PromptDocument,
+    db::{Database, Prompt},
+    error::Result,
+    prompt::PromptDocument,
 };
 
 pub fn completions(arguments: CompletionsArgs) -> Result<()> {
@@ -58,192 +50,11 @@ pub fn execute(command: Command, database: &mut Database) -> Result<()> {
     }
 }
 
-fn write_stdout(value: &str) -> Result<()> {
-    let stdout = io::stdout();
-    let mut output = stdout.lock();
-    output.write_all(value.as_bytes())?;
-    output.flush()?;
-    Ok(())
-}
-
 fn warn_single_brace_variables(content: &str) {
     for expression in crate::prompt::template::single_brace_variables(content) {
         eprintln!(
             "warning: `{expression}` uses single braces and will not be replaced; use `{{{expression}}}` for a template variable"
         );
-    }
-}
-
-fn stdout_supports_color() -> bool {
-    !matches!(AutoStream::choice(&io::stdout()), ColorChoice::Never)
-}
-
-fn style_text(value: &str, style: Style, colors_enabled: bool) -> String {
-    if colors_enabled {
-        format!("{style}{value}{style:#}")
-    } else {
-        value.to_owned()
-    }
-}
-
-fn clean_inline(value: &str) -> String {
-    value
-        .chars()
-        .map(|character| match character {
-            '\t' | '\r' | '\n' => ' ',
-            _ => character,
-        })
-        .collect()
-}
-
-fn write_paged_stdout(value: &str) -> Result<()> {
-    if !io::stdout().is_terminal() {
-        return write_stdout(value);
-    }
-
-    let command = pager_command()?;
-    if !write_to_pager(value, &command)? {
-        return write_stdout(value);
-    }
-    Ok(())
-}
-
-fn write_to_pager(value: &str, command: &[String]) -> Result<bool> {
-    let (program, arguments) = command
-        .split_first()
-        .expect("pager command always contains a program");
-    let mut pager = match ProcessCommand::new(program)
-        .args(arguments)
-        .stdin(Stdio::piped())
-        .spawn()
-    {
-        Ok(pager) => pager,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
-        Err(error) => return Err(error.into()),
-    };
-
-    let write_result = pager
-        .stdin
-        .take()
-        .expect("pager stdin is piped")
-        .write_all(value.as_bytes());
-    let status = pager.wait()?;
-
-    if let Err(error) = write_result {
-        if error.kind() == io::ErrorKind::BrokenPipe {
-            return Ok(true);
-        }
-        return Err(error.into());
-    }
-    if !status.success() {
-        return Err(Error::Message(format!("pager exited with status {status}")));
-    }
-    Ok(true)
-}
-
-fn pager_command() -> Result<Vec<String>> {
-    let value = env::var("PAGER")
-        .ok()
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| "less -FRX".into());
-    let command = shell_words::split(&value)
-        .map_err(|error| Error::Message(format!("invalid pager command: {error}")))?;
-    if command.is_empty() {
-        return Err(Error::Message("pager command must not be empty".into()));
-    }
-    Ok(command)
-}
-
-fn current_local_offset() -> Result<UtcOffset> {
-    UtcOffset::current_local_offset()
-        .map_err(|error| Error::Message(format!("failed to determine local time: {error}")))
-}
-
-fn format_local_timestamp(timestamp: i64, local_offset: UtcOffset) -> Result<String> {
-    let timestamp = OffsetDateTime::from_unix_timestamp(timestamp)
-        .map_err(|_| Error::Message(format!("timestamp is out of range: {timestamp}")))?
-        .to_offset(local_offset);
-    Ok(format!(
-        "{:04}-{:02}-{:02} {:02}:{:02}",
-        timestamp.year(),
-        timestamp.month() as u8,
-        timestamp.day(),
-        timestamp.hour(),
-        timestamp.minute()
-    ))
-}
-
-fn format_table<const COLUMNS: usize>(
-    headers: &[&str; COLUMNS],
-    rows: &[[String; COLUMNS]],
-    column_styles: &[Style; COLUMNS],
-    colors_enabled: bool,
-) -> String {
-    let widths = std::array::from_fn(|column| {
-        rows.iter()
-            .map(|row| row[column].chars().count())
-            .chain([headers[column].chars().count()])
-            .max()
-            .unwrap_or_default()
-    });
-
-    let mut lines = Vec::with_capacity(rows.len() + 2);
-    lines.push(format_table_row(
-        headers,
-        &widths,
-        &[Style::new().bold(); COLUMNS],
-        colors_enabled,
-    ));
-    let separator = widths
-        .iter()
-        .map(|width| "─".repeat(*width))
-        .collect::<Vec<_>>()
-        .join("  ");
-    lines.push(style_text(
-        &separator,
-        Style::new().dimmed(),
-        colors_enabled,
-    ));
-    lines.extend(
-        rows.iter()
-            .map(|row| format_table_row(row, &widths, column_styles, colors_enabled)),
-    );
-    format!("{}\n", lines.join("\n"))
-}
-
-fn format_table_row<const COLUMNS: usize, S: AsRef<str>>(
-    columns: &[S; COLUMNS],
-    widths: &[usize; COLUMNS],
-    styles: &[Style; COLUMNS],
-    colors_enabled: bool,
-) -> String {
-    columns
-        .iter()
-        .enumerate()
-        .map(|(index, value)| {
-            let value = value.as_ref();
-            let padding = if index + 1 == COLUMNS {
-                0
-            } else {
-                widths[index] - value.chars().count()
-            };
-            format!(
-                "{}{}",
-                style_text(value, styles[index], colors_enabled),
-                " ".repeat(padding)
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("  ")
-}
-
-fn document_to_input(document: PromptDocument) -> PromptInput {
-    PromptInput {
-        name: document.name,
-        description: document.description,
-        content: document.content,
-        tags: document.tags,
-        exec: document.exec,
     }
 }
 
@@ -254,44 +65,5 @@ fn prompt_to_document(prompt: Prompt) -> PromptDocument {
         tags: prompt.tags,
         exec: prompt.exec,
         content: prompt.content,
-    }
-}
-
-#[cfg(all(test, unix))]
-mod tests {
-    use std::fs;
-
-    use anstyle::AnsiColor;
-
-    use super::*;
-
-    #[test]
-    fn colors_table_cells_without_affecting_layout() {
-        let headers = ["ID", "NAME"];
-        let rows = [["1".to_owned(), "alpha".to_owned()]];
-        let styles = [Style::new().dimmed(), AnsiColor::Cyan.on_default()];
-        let plain = format_table(&headers, &rows, &styles, false);
-        let colored = format_table(&headers, &rows, &styles, true);
-
-        assert_eq!(anstream::adapter::strip_str(&colored).to_string(), plain);
-        assert!(colored.contains("\u{1b}[1mID\u{1b}[0m"));
-        assert!(colored.contains("\u{1b}[2m1\u{1b}[0m"));
-        assert!(colored.contains("\u{1b}[36malpha\u{1b}[0m"));
-    }
-
-    #[test]
-    fn sends_output_to_pager_stdin() {
-        let directory = tempfile::tempdir().unwrap();
-        let destination = directory.path().join("paged-output");
-        let command = vec![
-            "sh".to_owned(),
-            "-c".to_owned(),
-            "cat > \"$1\"".to_owned(),
-            "pager".to_owned(),
-            destination.to_string_lossy().into_owned(),
-        ];
-
-        assert!(write_to_pager("paged output\n", &command).unwrap());
-        assert_eq!(fs::read_to_string(destination).unwrap(), "paged output\n");
     }
 }

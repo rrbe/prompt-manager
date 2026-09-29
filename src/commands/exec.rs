@@ -10,10 +10,10 @@ use crate::{
     prompt::parse_exec_command,
 };
 
-use super::get;
+use super::render;
 
 pub fn run(arguments: ExecArgs, database: &mut Database) -> Result<()> {
-    let rendered = get::render(arguments.prompt, database)?;
+    let rendered = render::render(arguments.prompt, database)?;
     let command = rendered
         .exec
         .as_deref()
