@@ -170,6 +170,23 @@ pm exec code-review
 pm exec code-review -- --model gpt-5.4
 ```
 
+使用 `--silent`，成功时隐藏子命令的 stderr，失败时显示捕获的 stderr。stdout 和子命令退出码保持不变：
+
+```bash
+pm exec code-review --silent
+```
+
+配置为 `exec: codex exec -` 时，stdout 只有最终答案，过程输出写入 stderr。Claude Code 可配置为 `exec: claude -p --output-format text`，不加 `--verbose`。对于其他命令写入 stdout 的过程信息，`--silent` 不会过滤。
+
+也可以用管道保存最终答案，或将过程输出重定向到日志：
+
+```bash
+pm exec code-review --silent | tee answer.md
+pm exec code-review 2>agent.log
+```
+
+管道和重定向应写在终端命令中；`exec:` 字段不经过 shell，不能直接使用这些语法。
+
 ### 4. 列表与搜索
 
 ```bash

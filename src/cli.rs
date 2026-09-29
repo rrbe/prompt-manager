@@ -105,6 +105,10 @@ pub struct ExecArgs {
     #[command(flatten)]
     pub prompt: PromptArgs,
 
+    /// Hide command stderr on success; show it on failure. Stdout is unchanged.
+    #[arg(long)]
+    pub silent: bool,
+
     /// Append arguments to the configured command.
     #[arg(last = true, value_name = "ARG")]
     pub arguments: Vec<OsString>,

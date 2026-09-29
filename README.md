@@ -180,6 +180,23 @@ Arguments after `--` are appended to the configured command:
 pm exec code-review -- --model gpt-5.4
 ```
 
+Use `--silent` to hide the command's stderr on success and show it on failure. Stdout and the command's exit code are preserved:
+
+```bash
+pm exec code-review --silent
+```
+
+With `exec: codex exec -`, stdout contains only the final answer; progress goes to stderr. For Claude Code, use `exec: claude -p --output-format text` without `--verbose`. `--silent` does not filter progress written to stdout by other commands.
+
+You can also pipe the final answer or redirect progress to a log:
+
+```bash
+pm exec code-review --silent | tee answer.md
+pm exec code-review 2>agent.log
+```
+
+Put shell pipes and redirections on the command line, not in the `exec:` field, which runs without a shell.
+
 ### 4. Listing and Search
 
 ```bash

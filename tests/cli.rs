@@ -455,6 +455,73 @@ fn exec_renders_stdin_and_variables_and_appends_arguments() {
 
 #[cfg(unix)]
 #[test]
+fn exec_silent_hides_stderr_on_success_and_replays_it_on_failure() {
+    let directory = TempDir::new().unwrap();
+    let script = directory.path().join("output.sh");
+    fs::write(
+        &script,
+        "printf 'progress\\n' >&2\ncat >/dev/null\nprintf 'answer\\n'\nexit \"$1\"\n",
+    )
+    .unwrap();
+    import_prompt(
+        directory.path(),
+        "output.md",
+        &format!(
+            "---\nname: output\nexec: sh '{}'\n---\n\nbody",
+            script.display()
+        ),
+    );
+
+    for (silent, exit_code, expected_stderr) in [
+        (false, "0", "progress\n"),
+        (true, "0", ""),
+        (true, "7", "progress\n"),
+    ] {
+        let mut command = pm(directory.path());
+        command.args(["exec", "output"]);
+        if silent {
+            command.arg("--silent");
+        }
+        command
+            .args(["--", exit_code])
+            .assert()
+            .code(exit_code.parse::<i32>().unwrap())
+            .stdout("answer\n")
+            .stderr(expected_stderr);
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn exec_silent_handles_large_stderr_before_reading_the_prompt() {
+    let directory = TempDir::new().unwrap();
+    let script = directory.path().join("large-output.sh");
+    fs::write(
+        &script,
+        "dd if=/dev/zero bs=1024 count=1024 >&2 2>/dev/null\ncat >/dev/null\nprintf 'answer\\n'\n",
+    )
+    .unwrap();
+    import_prompt(
+        directory.path(),
+        "large-output.md",
+        &format!(
+            "---\nname: large-output\nexec: sh '{}'\n---\n\n{}",
+            script.display(),
+            "x".repeat(1024 * 1024)
+        ),
+    );
+
+    pm(directory.path())
+        .args(["exec", "large-output", "--silent"])
+        .timeout(std::time::Duration::from_secs(10))
+        .assert()
+        .success()
+        .stdout("answer\n")
+        .stderr("");
+}
+
+#[cfg(unix)]
+#[test]
 fn exec_supports_id_and_propagates_the_command_exit_code() {
     use std::os::unix::fs::PermissionsExt;
 

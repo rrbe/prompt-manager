@@ -1,5 +1,5 @@
 use std::{
-    io::Write,
+    io::{self, Seek, Write},
     process::{Command, Stdio},
 };
 
@@ -23,10 +23,21 @@ pub fn run(arguments: ExecArgs, database: &mut Database) -> Result<()> {
         .split_first()
         .expect("validated exec command contains a program");
 
+    let mut captured_stderr = if arguments.silent {
+        Some(tempfile::tempfile()?)
+    } else {
+        None
+    };
+    let stderr = match &captured_stderr {
+        Some(file) => Stdio::from(file.try_clone()?),
+        None => Stdio::inherit(),
+    };
+
     let mut child = Command::new(program)
         .args(configured_arguments)
         .args(arguments.arguments)
         .stdin(Stdio::piped())
+        .stderr(stderr)
         .spawn()
         .map_err(|error| {
             Error::Message(format!("failed to start exec command `{program}`: {error}"))
@@ -41,6 +52,10 @@ pub fn run(arguments: ExecArgs, database: &mut Database) -> Result<()> {
     let status = child.wait()?;
 
     if !status.success() {
+        if let Some(file) = &mut captured_stderr {
+            file.rewind()?;
+            io::copy(file, &mut io::stderr().lock())?;
+        }
         return Err(Error::ExecFailed(status));
     }
     if let Err(error) = write_result {
