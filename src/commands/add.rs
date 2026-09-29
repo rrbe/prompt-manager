@@ -41,5 +41,6 @@ pub fn run(arguments: AddArgs, database: &mut Database) -> Result<()> {
         );
         return Ok(());
     }
+    super::warn_single_brace_variables(&document.content);
     database.create_prompt(&document_to_input(document))
 }

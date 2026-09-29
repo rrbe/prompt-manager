@@ -115,6 +115,35 @@ pub fn placeholders(template: &str) -> Vec<Placeholder> {
     result
 }
 
+pub fn single_brace_variables(template: &str) -> Vec<&str> {
+    let mut result = Vec::new();
+    let mut cursor = 0;
+    while let Some(relative_open) = template[cursor..].find('{') {
+        let open = cursor + relative_open;
+        if template[open..].starts_with("{{") {
+            let Some(close) = template[open + 2..].find("}}") else {
+                break;
+            };
+            cursor = open + 2 + close + 2;
+            continue;
+        }
+        let Some(relative_close) = template[open + 1..].find('}') else {
+            break;
+        };
+        let close = open + 1 + relative_close;
+        let candidate = &template[open + 1..close];
+        if candidate.contains('{') {
+            cursor = open + 1;
+            continue;
+        }
+        if variable_expression(candidate.trim()).is_some() {
+            result.push(&template[open..=close]);
+        }
+        cursor = close + 1;
+    }
+    result
+}
+
 pub fn compositions(template: &str) -> Vec<Composition> {
     let bytes = template.as_bytes();
     let mut result = Vec::new();
@@ -337,6 +366,16 @@ mod tests {
     fn leaves_single_braces_unchanged() {
         let template = "{value} and JSON: {\"outer\": {\"key\": true}}";
         assert_eq!(render(template, &HashMap::new()).unwrap(), template);
+    }
+
+    #[test]
+    fn detects_single_brace_variables_without_flagging_templates_or_json() {
+        assert_eq!(
+            single_brace_variables(
+                "中文 { project=ezze-server } { image } {{ env=dev }} {{value={literal}}} {\"outer\": {\"key\": true}} { not a variable }"
+            ),
+            vec!["{ project=ezze-server }", "{ image }"]
+        );
     }
 
     #[test]

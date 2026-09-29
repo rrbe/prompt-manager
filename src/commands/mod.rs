@@ -64,6 +64,14 @@ fn write_stdout(value: &str) -> Result<()> {
     Ok(())
 }
 
+fn warn_single_brace_variables(content: &str) {
+    for expression in crate::prompt::template::single_brace_variables(content) {
+        eprintln!(
+            "warning: `{expression}` uses single braces and will not be replaced; use `{{{expression}}}` for a template variable"
+        );
+    }
+}
+
 fn stdout_supports_color() -> bool {
     !matches!(AutoStream::choice(&io::stdout()), ColorChoice::Never)
 }

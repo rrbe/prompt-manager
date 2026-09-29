@@ -217,6 +217,81 @@ fn add_no_edit_validates_the_prompt_body() {
         ));
 }
 
+#[cfg(unix)]
+#[test]
+fn add_and_edit_warn_about_single_brace_variables_and_save_content() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let directory = TempDir::new().unwrap();
+    let body = "{ project=ezze-server } { image } {{ env=dev }}";
+    let warning = "warning: `{ project=ezze-server }` uses single braces and will not be replaced; use `{{ project=ezze-server }}` for a template variable\nwarning: `{ image }` uses single braces and will not be replaced; use `{{ image }}` for a template variable\n";
+
+    for (name, no_edit) in [("with-editor", false), ("without-editor", true)] {
+        let mut command = pm(directory.path());
+        command.env("EDITOR", "true").args(["add", name]);
+        if no_edit {
+            command.arg("--no-edit");
+        }
+        command
+            .write_stdin(body)
+            .assert()
+            .success()
+            .stdout("")
+            .stderr(warning);
+        pm(directory.path())
+            .args(["export", name])
+            .assert()
+            .success()
+            .stdout(predicate::str::ends_with(body))
+            .stderr("");
+    }
+
+    let edited_body = "Deploy { image }";
+    let edited_document = write_prompt(
+        directory.path(),
+        "edited.md",
+        &format!("---\nname: with-editor\n---\n\n{edited_body}"),
+    );
+    let editor = directory.path().join("editor.sh");
+    fs::write(&editor, "#!/bin/sh\ncp \"$EDITED_DOCUMENT\" \"$1\"\n").unwrap();
+    fs::set_permissions(&editor, fs::Permissions::from_mode(0o700)).unwrap();
+    pm(directory.path())
+        .env("EDITOR", &editor)
+        .env("EDITED_DOCUMENT", &edited_document)
+        .args(["edit", "with-editor"])
+        .assert()
+        .success()
+        .stdout("")
+        .stderr("warning: `{ image }` uses single braces and will not be replaced; use `{{ image }}` for a template variable\n");
+    pm(directory.path())
+        .args(["export", "with-editor"])
+        .assert()
+        .success()
+        .stdout(predicate::str::ends_with(edited_body))
+        .stderr("");
+}
+
+#[cfg(unix)]
+#[test]
+fn add_and_edit_accept_double_brace_variables_and_json_without_warnings() {
+    let directory = TempDir::new().unwrap();
+    let body = "{{ project=gateway }} {{ image }} {\"outer\": {\"key\": true}}";
+    pm(directory.path())
+        .args(["add", "valid-braces", "--no-edit"])
+        .write_stdin(body)
+        .assert()
+        .success()
+        .stdout("")
+        .stderr("");
+    pm(directory.path())
+        .env("EDITOR", "true")
+        .args(["edit", "valid-braces"])
+        .assert()
+        .success()
+        .stdout("")
+        .stderr("");
+}
+
 #[test]
 fn renders_piped_input_and_explicit_variables_with_clean_stdout() {
     let directory = TempDir::new().unwrap();
