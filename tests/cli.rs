@@ -189,7 +189,7 @@ fn add_skips_empty_or_whitespace_only_bodies() {
                 .assert()
                 .success()
                 .stdout("")
-                .stderr("Prompt 'empty' was not created: content is empty.\n");
+                .stderr("\nempty\n  Warning  Prompt was not created: content is empty.\n\n");
 
             pm(directory.path())
                 .args(["get", "empty"])
@@ -224,7 +224,7 @@ fn add_and_edit_warn_about_single_brace_variables_and_save_content() {
 
     let directory = TempDir::new().unwrap();
     let body = "{ project=ezze-server } { image } {{ env=dev }}";
-    let warning = "warning: `{ project=ezze-server }` uses single braces and will not be replaced; use `{{ project=ezze-server }}` for a template variable\nwarning: `{ image }` uses single braces and will not be replaced; use `{{ image }}` for a template variable\n";
+    let warning = "  Warning  Single-brace variable at line 1, column 1\n           Replace: { project=ezze-server }  →  {{ project=ezze-server }}\n  Warning  Single-brace variable at line 1, column 25\n           Replace: { image }  →  {{ image }}\n\n";
 
     for (name, no_edit) in [("with-editor", false), ("without-editor", true)] {
         let mut command = pm(directory.path());
@@ -237,7 +237,7 @@ fn add_and_edit_warn_about_single_brace_variables_and_save_content() {
             .assert()
             .success()
             .stdout("")
-            .stderr(warning);
+            .stderr(format!("\n{name}\n{warning}"));
         pm(directory.path())
             .args(["export", name])
             .assert()
@@ -262,7 +262,7 @@ fn add_and_edit_warn_about_single_brace_variables_and_save_content() {
         .assert()
         .success()
         .stdout("")
-        .stderr("warning: `{ image }` uses single braces and will not be replaced; use `{{ image }}` for a template variable\n");
+        .stderr("\nwith-editor\n  Warning  Single-brace variable at line 1, column 8\n           Replace: { image }  →  {{ image }}\n\n");
     pm(directory.path())
         .args(["export", "with-editor"])
         .assert()
@@ -1573,7 +1573,7 @@ fn add_shows_a_non_persistent_prompt_content_placeholder() {
         .assert()
         .success()
         .stdout("")
-        .stderr("Prompt 'empty' was not created: content is empty.\n");
+        .stderr("\nempty\n  Warning  Prompt was not created: content is empty.\n\n");
     assert!(
         fs::read_to_string(snapshot)
             .unwrap()
@@ -1913,5 +1913,86 @@ fn lint_formats_grouped_diagnostics_and_respects_color_preferences() {
     assert!(output.status.success());
     let colored = String::from_utf8(output.stderr).unwrap();
     assert!(colored.contains("\u{1b}["));
+    assert_eq!(anstream::adapter::strip_str(&colored).to_string(), expected);
+}
+
+#[cfg(unix)]
+#[test]
+fn add_and_edit_use_lint_diagnostics_and_respect_color_preferences() {
+    let directory = TempDir::new().unwrap();
+    let body = "卸载 { app }\n{ app }";
+    let expected = "\nuninstall-app\n  Warning  Single-brace variable at line 1, column 4\n           Replace: { app }  →  {{ app }}\n  Warning  Single-brace variable at line 2, column 1\n           Replace: { app }  →  {{ app }}\n\n";
+    pm(directory.path())
+        .env("NO_COLOR", "1")
+        .args(["add", "uninstall-app", "--no-edit"])
+        .write_stdin(body)
+        .assert()
+        .success()
+        .stdout("")
+        .stderr(expected);
+    for command in ["add", "edit", "lint"] {
+        let data = TempDir::new().unwrap();
+        if command != "add" {
+            store_lint_prompt(data.path(), "uninstall-app", body);
+        }
+        let mut invocation = pm(data.path());
+        invocation
+            .env_remove("NO_COLOR")
+            .env("CLICOLOR_FORCE", "1")
+            .env("EDITOR", "true")
+            .args([command, "uninstall-app"]);
+        if command == "add" {
+            invocation.arg("--no-edit").write_stdin(body);
+        }
+        let output = invocation
+            .assert()
+            .success()
+            .stdout("")
+            .get_output()
+            .clone();
+        let colored = String::from_utf8(output.stderr).unwrap();
+        assert!(colored.contains("\u{1b}[1m\u{1b}[33mWarning"));
+        let plain = anstream::adapter::strip_str(&colored).to_string();
+        if command == "lint" {
+            assert_eq!(
+                plain,
+                format!("{expected}Checked 1 prompt · 0 errors · 2 warnings\n\n")
+            );
+        } else {
+            assert_eq!(plain, expected);
+        }
+    }
+    pm(directory.path())
+        .env("NO_COLOR", "1")
+        .env("EDITOR", "true")
+        .args(["edit", "uninstall-app"])
+        .assert()
+        .success()
+        .stdout("")
+        .stderr(expected);
+}
+
+#[test]
+fn command_errors_use_consistent_labels_and_respect_color_preferences() {
+    let directory = TempDir::new().unwrap();
+    let expected = "Error  prompt not found: missing\n";
+    pm(directory.path())
+        .env("NO_COLOR", "1")
+        .args(["get", "missing"])
+        .assert()
+        .failure()
+        .stdout("")
+        .stderr(expected);
+    let output = pm(directory.path())
+        .env_remove("NO_COLOR")
+        .env("CLICOLOR_FORCE", "1")
+        .args(["get", "missing"])
+        .assert()
+        .failure()
+        .stdout("")
+        .get_output()
+        .clone();
+    let colored = String::from_utf8(output.stderr).unwrap();
+    assert!(colored.contains("\u{1b}[1m\u{1b}[31mError"));
     assert_eq!(anstream::adapter::strip_str(&colored).to_string(), expected);
 }

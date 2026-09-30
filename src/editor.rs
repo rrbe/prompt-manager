@@ -106,8 +106,12 @@ fn read_editor_file(path: &Path) -> Result<String> {
 fn confirm_retry(validation_error: &Error) -> Result<bool> {
     let stdin = io::stdin();
     let stderr = io::stderr();
-    let mut error_output = stderr.lock();
-    writeln!(error_output, "validation failed: {validation_error}")?;
+    let mut error_output = anstream::AutoStream::auto(stderr.lock());
+    const ERROR: anstyle::Style = anstyle::AnsiColor::Red.on_default().bold();
+    writeln!(
+        error_output,
+        "{ERROR}Error{ERROR:#}  Validation failed: {validation_error}"
+    )?;
 
     loop {
         write!(error_output, "Reopen editor? [Y/n] ")?;

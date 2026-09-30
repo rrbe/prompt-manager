@@ -1,5 +1,6 @@
 mod add;
 mod completions;
+mod diagnostics;
 mod edit;
 mod exec;
 mod export;
@@ -50,11 +51,11 @@ pub fn execute(command: Command, database: &mut Database) -> Result<()> {
     }
 }
 
-fn warn_single_brace_variables(content: &str) {
-    for expression in crate::prompt::template::single_brace_variables(content) {
-        eprintln!(
-            "warning: `{expression}` uses single braces and will not be replaced; use `{{{expression}}}` for a template variable"
-        );
+fn warn_single_brace_variables(name: &str, content: &str) {
+    let issues = diagnostics::single_brace_diagnostics(content);
+    if !issues.is_empty() {
+        anstream::eprintln!();
+        diagnostics::print_group(name, &issues);
     }
 }
 

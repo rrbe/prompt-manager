@@ -29,12 +29,17 @@ pub fn run(arguments: AddArgs, database: &mut Database) -> Result<()> {
         editor::edit_until_valid(&initial, markdown::parse_editor)?
     };
     if document.content.trim().is_empty() {
-        eprintln!(
-            "Prompt '{}' was not created: content is empty.",
-            document.name
+        anstream::eprintln!();
+        super::diagnostics::print_group(
+            &document.name,
+            &[super::diagnostics::Diagnostic {
+                warning: true,
+                message: "Prompt was not created: content is empty.".into(),
+                suggestion: None,
+            }],
         );
         return Ok(());
     }
-    super::warn_single_brace_variables(&document.content);
+    super::warn_single_brace_variables(&document.name, &document.content);
     database.create_prompt(&document)
 }
